@@ -15,10 +15,21 @@ export async function getBrandSettings() {
     return { data: null, error: 'Unauthorized' }
   }
 
+  // Resolve brand_id from the user's profile (works for all roles, not just brand owners)
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('brand_id')
+    .eq('id', user.id)
+    .single()
+
+  if (profileError || !profile?.brand_id) {
+    return { data: null, error: 'Could not resolve brand for this account' }
+  }
+
   const { data, error } = await supabase
     .from('brands')
     .select('*')
-    .eq('owner_id', user.id)
+    .eq('id', profile.brand_id)
     .single()
 
   if (error) {
@@ -62,7 +73,6 @@ export async function updateBrandGeneral(
       updated_at: new Date().toISOString(),
     })
     .eq('id', brandId)
-    .eq('owner_id', user.id)
 
   if (error) {
     return { error: error.message }
@@ -103,7 +113,6 @@ export async function updateBrandAppearance(
     .from('brands')
     .update(updatePayload)
     .eq('id', brandId)
-    .eq('owner_id', user.id)
 
   if (error) {
     return { error: error.message }
