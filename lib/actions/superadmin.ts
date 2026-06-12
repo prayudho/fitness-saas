@@ -214,21 +214,7 @@ export async function createBrand(data: {
 
     const userId = newUser.user.id
 
-    // Insert profile record
-    const { error: profileError } = await supabase.from('profiles').insert({
-      id: userId,
-      full_name: data.ownerName,
-      role: 'admin',
-      brand_id: null,
-    })
-
-    if (profileError) {
-      // Roll back user
-      await supabase.auth.admin.deleteUser(userId)
-      return { error: profileError.message }
-    }
-
-    // Insert brand
+    // Insert brand first (profile is auto-created by handle_new_user trigger)
     const { data: brand, error: brandError } = await supabase
       .from('brands')
       .insert({
@@ -246,11 +232,17 @@ export async function createBrand(data: {
       return { error: brandError?.message ?? 'Failed to create brand.' }
     }
 
-    // Link profile to brand
-    await supabase
+    // Update the auto-created profile: set role=admin and link to brand
+    const { error: profileError } = await supabase
       .from('profiles')
-      .update({ brand_id: brand.id })
+      .update({ full_name: data.ownerName, role: 'admin', brand_id: brand.id })
       .eq('id', userId)
+
+    if (profileError) {
+      await supabase.auth.admin.deleteUser(userId)
+      await supabase.from('brands').delete().eq('id', brand.id)
+      return { error: profileError.message }
+    }
 
     revalidatePath('/superadmin/brands')
     return { error: null, brandId: brand.id }

@@ -54,18 +54,30 @@ export async function signUp(
     return { error: authError.message }
   }
 
-  const { error: brandError } = await serviceClient.from('brands').insert({
-    name: brandName,
-    subdomain: brandSlug,
-    owner_id: authData.user.id,
-    is_active: true,
-    plan: 'starter',
-  })
+  const userId = authData.user.id
+
+  const { data: brand, error: brandError } = await serviceClient
+    .from('brands')
+    .insert({
+      name: brandName,
+      slug: brandSlug,
+      owner_user_id: userId,
+      is_active: true,
+      subscription_plan: 'starter',
+    })
+    .select()
+    .single()
 
   if (brandError) {
-    await serviceClient.auth.admin.deleteUser(authData.user.id)
+    await serviceClient.auth.admin.deleteUser(userId)
     return { error: brandError.message }
   }
+
+  // Update the auto-created profile (handle_new_user trigger created it with role='member')
+  await serviceClient
+    .from('profiles')
+    .update({ full_name: ownerName, role: 'admin', brand_id: brand.id })
+    .eq('id', userId)
 
   return { error: null }
 }
