@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import Link from 'next/link'
 import { PageHeader } from '@/components/shared/page-header'
 import { DataTable } from '@/components/shared/data-table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -24,7 +26,7 @@ import { FreezeDialog } from '@/components/members/freeze-dialog'
 import { useMembers, useUnfreezeMembership, useCancelMembership } from '@/lib/hooks/use-members'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useDebounce } from '@/lib/hooks/use-debounce'
-import { UserPlus } from 'lucide-react'
+import { Users, UserPlus } from 'lucide-react'
 
 export default function MembersPage() {
   const [search, setSearch] = useState('')
@@ -44,6 +46,9 @@ export default function MembersPage() {
     status: status !== 'all' ? status : undefined,
     page: 1,
   })
+
+  const { data: activeCountData } = useMembers({ status: 'active', page: 1 })
+  const activeCount = activeCountData?.count ?? 0
 
   const members = (membersData?.data ?? []) as MemberRow[]
 
@@ -94,17 +99,25 @@ export default function MembersPage() {
         title="Members"
         description="Manage your gym members and their memberships"
         action={
-          <Button
-            onClick={() => {
-              setSelectedMember(null)
-              setSheetOpen(true)
-            }}
-          >
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add Member
+          <Button asChild>
+            <Link href="/admin/members/new">
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add Member
+            </Link>
           </Button>
         }
       />
+
+      {/* Stat badge row */}
+      <div className="mb-4">
+        <Card className="inline-flex">
+          <CardContent className="flex items-center gap-3 py-3 px-5">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Total Active Members:</span>
+            <span className="text-sm font-semibold">{activeCount}</span>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <Input

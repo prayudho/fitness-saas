@@ -12,15 +12,54 @@ import {
   Dumbbell,
   Mail,
   ExternalLink,
+  UserPlus,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useBrandDetail, useSuspendBrand, useActivateBrand } from '@/lib/hooks/use-superadmin'
+import { getTeamMembers, inviteTeamMember } from '@/lib/actions/team.actions'
+import type { TeamMember } from '@/lib/actions/team.actions'
+import { inviteTeamMemberSchema, type InviteTeamMemberInput } from '@/lib/validations/team'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
@@ -38,6 +77,274 @@ function getInitials(name: string): string {
     .join('')
     .toUpperCase()
     .slice(0, 2)
+}
+
+// ----------------------------------------------------------------
+// Invite team member sheet (inline, bound to this brand)
+// ----------------------------------------------------------------
+function InviteTeamMemberSheet({
+  brandId,
+  open,
+  onOpenChange,
+}: {
+  brandId: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const qc = useQueryClient()
+
+  const form = useForm<InviteTeamMemberInput>({
+    resolver: zodResolver(inviteTeamMemberSchema),
+    defaultValues: {
+      brandId,
+      fullName: '',
+      email: '',
+      phone: '',
+      role: 'staff',
+      tempPassword: '',
+    },
+  })
+
+  const invite = useMutation({
+    mutationFn: async (data: InviteTeamMemberInput) => {
+      const result = await inviteTeamMember(data)
+      if (result.error) throw new Error(result.error)
+      return result
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['team-members', brandId] })
+      toast.success('Team member invited successfully!')
+      form.reset({ brandId, fullName: '', email: '', phone: '', role: 'staff', tempPassword: '' })
+      onOpenChange(false)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Add Team Member</SheetTitle>
+          <SheetDescription>
+            Invite a new staff, trainer, or admin to this brand. They will receive a temporary
+            password via email and be prompted to change it on first login.
+          </SheetDescription>
+        </SheetHeader>
+
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit((v) => invite.mutate(v))}
+            className="mt-6 space-y-4"
+          >
+            <FormField
+              control={form.control}
+              name="fullName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Full name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Jane Doe" {...field} disabled={invite.isPending} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="jane@example.com"
+                      {...field}
+                      disabled={invite.isPending}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone (optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="tel"
+                      placeholder="+62 812 3456 7890"
+                      {...field}
+                      disabled={invite.isPending}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="role"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Role</FormLabel>
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={invite.isPending}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select role" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="staff">Staff</SelectItem>
+                      <SelectItem value="trainer">Trainer</SelectItem>
+                      <SelectItem value="support">Support</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="tempPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Temporary password</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="text"
+                      placeholder="Min. 8 characters"
+                      {...field}
+                      disabled={invite.isPending}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Button type="submit" className="w-full" disabled={invite.isPending}>
+              {invite.isPending ? (
+                <span className="flex items-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Sending invite...
+                </span>
+              ) : (
+                'Send Invite'
+              )}
+            </Button>
+          </form>
+        </Form>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+// ----------------------------------------------------------------
+// Team members table for the brand detail page
+// ----------------------------------------------------------------
+function BrandTeamSection({ brandId }: { brandId: string }) {
+  const [sheetOpen, setSheetOpen] = React.useState(false)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['team-members', brandId],
+    queryFn: async () => {
+      const result = await getTeamMembers(brandId)
+      if (result.error) throw new Error(result.error)
+      return result
+    },
+    enabled: Boolean(brandId),
+  })
+
+  const members: TeamMember[] = data?.data ?? []
+
+  function roleBadgeVariant(role: string): 'default' | 'secondary' | 'outline' {
+    if (role === 'admin') return 'default'
+    if (role === 'trainer') return 'secondary'
+    return 'outline'
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-base font-semibold">Team Members</CardTitle>
+        <Button size="sm" onClick={() => setSheetOpen(true)}>
+          <UserPlus className="mr-2 h-4 w-4" />
+          Add Team Member
+        </Button>
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full rounded" />
+            ))}
+          </div>
+        ) : members.length === 0 ? (
+          <p className="px-6 py-8 text-center text-sm text-muted-foreground">
+            No team members yet. Click &ldquo;Add Team Member&rdquo; to invite someone.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Date Added</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {members.map((member) => (
+                <TableRow key={member.id}>
+                  <TableCell className="font-medium">{member.full_name}</TableCell>
+                  <TableCell>
+                    <Badge variant={roleBadgeVariant(member.role)} className="capitalize">
+                      {member.custom_role_name ?? member.role}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {member.is_active ? (
+                      <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                        Active
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive">Inactive</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right text-sm text-muted-foreground">
+                    {new Date(member.created_at).toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+
+      <InviteTeamMemberSheet
+        brandId={brandId}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+      />
+    </Card>
+  )
 }
 
 function BrandDetailSkeleton() {
@@ -237,6 +544,9 @@ export default function BrandDetailPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Team members */}
+      <BrandTeamSection brandId={id} />
 
       {/* Danger zone */}
       <Card className="border-red-200">

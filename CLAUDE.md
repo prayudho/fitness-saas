@@ -324,18 +324,20 @@ Update this section as you build each module.
 
 | Module | Schema | Server actions | Pages | Tests |
 |---|---|---|---|---|
-| Auth & roles | ⬜ | ⬜ | ⬜ | ⬜ |
-| Multi-tenant scaffold | ⬜ | ⬜ | ⬜ | ⬜ |
-| Super-admin panel | ⬜ | ⬜ | ⬜ | ⬜ |
-| Membership management | ⬜ | ⬜ | ⬜ | ⬜ |
-| Membership packages | ⬜ | ⬜ | ⬜ | ⬜ |
-| Personal trainer mgmt | ⬜ | ⬜ | ⬜ | ⬜ |
-| Fitness class mgmt | ⬜ | ⬜ | ⬜ | ⬜ |
-| Check-in & access | ⬜ | ⬜ | ⬜ | ⬜ |
-| Payment & billing | ⬜ | ⬜ | ⬜ | ⬜ |
-| Reporting dashboard | ⬜ | ⬜ | ⬜ | ⬜ |
-| Member portal | ⬜ | ⬜ | ⬜ | ⬜ |
-| Brand customization | ⬜ | ⬜ | ⬜ | ⬜ |
-| Email automation | ⬜ | ⬜ | ⬜ | ⬜ |
+| Auth & roles | ✅ | ✅ | ✅ | ⬜ |
+| Multi-tenant scaffold | ✅ | ✅ | ✅ | ⬜ |
+| Super-admin panel | ✅ | ✅ | ✅ | ⬜ |
+| Membership management | ✅ | ✅ | ✅ | ⬜ |
+| Membership packages | ✅ | ✅ | ✅ | ⬜ |
+| Personal trainer mgmt | ✅ | ✅ | ✅ | ⬜ |
+| Fitness class mgmt | ✅ | ✅ | ✅ | ⬜ |
+| Check-in & access | ✅ | ✅ | ✅ | ⬜ |
+| Payment & billing | ✅ | ✅ | ✅ | ⬜ |
+| Reporting dashboard | ✅ | ✅ | ✅ | ⬜ |
+| Member portal | ✅ | ✅ | ✅ | ⬜ |
+| Brand customization | ✅ | ✅ | ✅ | ⬜ |
+| Email automation | ✅ | ✅ | ✅ | ⬜ |
+| Team management | ✅ | ✅ | ✅ | ⬜ |
+| Member registration (admin) | ✅ | ✅ | ✅ | ⬜ |
 
 Legend: ⬜ not started · 🔄 in progress · ✅ done

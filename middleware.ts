@@ -61,6 +61,26 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
+  // 5a. Force password change — check before any protected-path or role logic
+  const isMustChangePasswordExempt =
+    pathname === '/change-password' ||
+    pathname === '/login' ||
+    pathname.startsWith('/api/')
+
+  if (user && !isMustChangePasswordExempt) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('must_change_password')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.must_change_password === true) {
+      const changePasswordUrl = request.nextUrl.clone()
+      changePasswordUrl.pathname = '/change-password'
+      return NextResponse.redirect(changePasswordUrl)
+    }
+  }
+
   // 5. Protected paths — redirect unauthenticated users to /login
   const protectedPaths = ['/admin', '/staff', '/trainer', '/member', '/superadmin']
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p))

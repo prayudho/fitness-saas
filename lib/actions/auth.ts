@@ -123,3 +123,27 @@ export async function getUserRole(): Promise<string | null> {
   const user = await getUser()
   return user?.app_metadata?.role ?? null
 }
+
+export async function setMustChangePasswordFalse(): Promise<{ error: string | null }> {
+  const supabase = createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'Not authenticated' }
+  }
+
+  const serviceClient = createServiceClient()
+
+  const { error } = await serviceClient
+    .from('profiles')
+    .update({ must_change_password: false })
+    .eq('id', user.id)
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  return { error: null }
+}
