@@ -151,7 +151,7 @@ export default function RegisterPage() {
                 <p className="text-xs text-muted-foreground">
                   Your URL:{' '}
                   <span className="font-medium">
-                    {brandSlug || 'yourbrand'}.fitnessplace.com
+                    {brandSlug || 'yourbrand'}.gerak.online
                   </span>
                 </p>
                 {errors.brandSlug && (

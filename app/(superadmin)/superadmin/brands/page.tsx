@@ -77,7 +77,7 @@ export default function BrandsPage() {
       header: 'Subdomain',
       cell: ({ row }) => (
         <span className="font-mono text-sm text-muted-foreground">
-          {row.original.slug}.fitnessplace.com
+          {row.original.slug}.gerak.online
         </span>
       ),
     },

@@ -8,7 +8,7 @@ export async function middleware(request: NextRequest) {
 
   // 2. Extract subdomain and set x-tenant-subdomain header
   const hostname = request.headers.get('host') ?? ''
-  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN ?? 'fitnessplace.com'
+  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN ?? 'gerak.online'
 
   const isMainDomain =
     hostname === appDomain ||

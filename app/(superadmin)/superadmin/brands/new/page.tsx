@@ -253,7 +253,7 @@ export default function NewBrandPage() {
                       <FormDescription>
                         Preview:{' '}
                         <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
-                          {brandSlug || 'your-slug'}.fitnessplace.com
+                          {brandSlug || 'your-slug'}.gerak.online
                         </span>
                       </FormDescription>
                       <FormMessage />
@@ -421,7 +421,7 @@ export default function NewBrandPage() {
                   <div className="grid grid-cols-2 gap-2 p-4">
                     <span className="text-sm text-muted-foreground">URL Slug</span>
                     <span className="text-sm font-mono bg-muted px-1.5 py-0.5 rounded w-fit">
-                      {values.brandSlug}.fitnessplace.com
+                      {values.brandSlug}.gerak.online
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 p-4">

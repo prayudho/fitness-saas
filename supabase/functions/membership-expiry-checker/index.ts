@@ -139,7 +139,7 @@ serve(async (req: Request): Promise<Response> => {
             'Authorization': 'Bearer ' + resendApiKey,
           },
           body: JSON.stringify({
-            from: 'noreply@fitnessplace.com',
+            from: 'noreply@gerak.online',
             to: [memberEmail],
             subject: subject + ' — ' + brandName,
             html: buildEmailHtml(memberName, subject, brandName, daysUntil),
