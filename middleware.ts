@@ -20,6 +20,13 @@ export async function middleware(request: NextRequest) {
     const subdomain = hostname.split('.')[0]
     if (subdomain && subdomain !== 'www') {
       response.headers.set('x-tenant-subdomain', subdomain)
+
+      // Redirect root path on a subdomain to /login (the brand portal entry point)
+      if (request.nextUrl.pathname === '/') {
+        const loginUrl = request.nextUrl.clone()
+        loginUrl.pathname = '/login'
+        return NextResponse.redirect(loginUrl)
+      }
     }
   }
 
