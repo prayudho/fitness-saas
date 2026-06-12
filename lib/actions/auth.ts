@@ -124,6 +124,31 @@ export async function getUserRole(): Promise<string | null> {
   return user?.app_metadata?.role ?? null
 }
 
+export async function resetMemberPasswordByAdmin(
+  profileId: string,
+  newPassword: string
+): Promise<{ error: string | null }> {
+  if (newPassword.length < 8) {
+    return { error: 'Password must be at least 8 characters' }
+  }
+
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const role = user.app_metadata?.role as string | undefined
+  if (role !== 'admin' && role !== 'superadmin') {
+    return { error: 'Not authorized to reset member passwords' }
+  }
+
+  const serviceClient = createServiceClient()
+  const { error } = await serviceClient.auth.admin.updateUserById(profileId, {
+    password: newPassword,
+  })
+
+  return { error: error?.message ?? null }
+}
+
 export async function setMustChangePasswordFalse(): Promise<{ error: string | null }> {
   const supabase = createClient()
   const {

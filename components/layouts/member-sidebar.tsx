@@ -10,6 +10,7 @@ import {
   Dumbbell,
   Receipt,
   User,
+  KeyRound,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: '/member/pt-booking', label: 'Personal Trainer', icon: Dumbbell },
   { href: '/member/billing', label: 'Billing', icon: Receipt },
   { href: '/member/profile', label: 'Profile', icon: User },
+  { href: '/member/account', label: 'My Account', icon: KeyRound },
 ]
 
 const STORAGE_KEY = 'member-sidebar-collapsed'

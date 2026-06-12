@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Calendar, Users, Clock, DollarSign, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react'
+import { Calendar, Users, Clock, DollarSign, KeyRound, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const STORAGE_KEY = 'trainer-sidebar-collapsed'
@@ -19,6 +19,7 @@ const navItems: NavItem[] = [
   { href: '/trainer/clients', label: 'My Clients', icon: Users },
   { href: '/trainer/availability', label: 'Availability', icon: Clock },
   { href: '/trainer/sessions', label: 'Earnings', icon: DollarSign },
+  { href: '/trainer/account', label: 'My Account', icon: KeyRound },
 ]
 
 export function TrainerSidebar() {

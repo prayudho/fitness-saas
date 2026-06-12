@@ -12,6 +12,7 @@ import {
   CreditCard,
   BarChart3,
   Settings,
+  KeyRound,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { href: '/admin/billing', label: 'Billing', icon: CreditCard },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
+  { href: '/admin/account', label: 'My Account', icon: KeyRound },
 ]
 
 const STORAGE_KEY = 'admin-sidebar-collapsed'

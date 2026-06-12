@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { ScanLine, Users, UserPlus, DollarSign, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react'
+import { ScanLine, Users, UserPlus, DollarSign, KeyRound, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const STORAGE_KEY = 'staff-sidebar-collapsed'
@@ -19,6 +19,7 @@ const navItems: NavItem[] = [
   { href: '/staff/members', label: 'Members', icon: Users },
   { href: '/staff/walkin', label: 'Walk-in', icon: UserPlus },
   { href: '/staff/payments', label: 'Payments', icon: DollarSign },
+  { href: '/staff/account', label: 'My Account', icon: KeyRound },
 ]
 
 export function StaffSidebar() {

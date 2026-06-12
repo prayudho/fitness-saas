@@ -12,6 +12,7 @@ import { AssignPackageDialog } from '@/components/members/assign-package-dialog'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { ArrowLeft, Pencil, Phone, Calendar, Shield, User } from 'lucide-react'
 import type { MembershipWithPackage } from '@/lib/actions/members'
+import { ResetPasswordDialog } from '@/components/members/reset-password-dialog'
 
 interface PageProps {
   params: { id: string }
@@ -49,12 +50,18 @@ export default async function MemberDetailPage({ params }: PageProps) {
         title={member.full_name ?? 'Unknown Member'}
         description={`Member since ${formatDate(member.created_at)}`}
         action={
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/admin/members/${params.id}/edit`}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <ResetPasswordDialog
+              memberId={params.id}
+              memberName={member.full_name ?? 'Member'}
+            />
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/admin/members/${params.id}/edit`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </Link>
+            </Button>
+          </div>
         }
       />
 
