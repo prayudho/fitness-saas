@@ -161,27 +161,24 @@ function FlowSelector({ value, onChange }: { value: Flow; onChange: (v: Flow) =>
 
 // ─── Packages query ──────────────────────────────────────────────────────────
 
+function getBrandIdFromCookie(): string | null {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(/(?:^|;\s*)__fp_brand_id=([^;]*)/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
 function useActivePackages() {
   return useQuery({
     queryKey: ['packages', 'active'],
     queryFn: async (): Promise<PackageRow[]> => {
+      const brandId = getBrandIdFromCookie()
+      if (!brandId) throw new Error('No brand context')
+
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) throw new Error('Unauthorized')
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('brand_id')
-        .eq('id', user.id)
-        .single()
-      if (!profile?.brand_id) throw new Error('No brand context')
-
       const { data, error } = await supabase
         .from('membership_packages')
         .select('*')
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .eq('is_active', true)
         .order('price', { ascending: true })
 
@@ -197,19 +194,9 @@ function useBrandId() {
   return useQuery({
     queryKey: ['my-brand-id'],
     queryFn: async (): Promise<string> => {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) throw new Error('Unauthorized')
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('brand_id')
-        .eq('id', user.id)
-        .single()
-      if (!profile?.brand_id) throw new Error('No brand context')
-      return profile.brand_id
+      const brandId = getBrandIdFromCookie()
+      if (!brandId) throw new Error('No brand context')
+      return brandId
     },
   })
 }

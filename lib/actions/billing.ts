@@ -38,7 +38,7 @@ export async function getInvoices(filters?: {
     let query = supabase
       .from('invoices')
       .select(
-        `*, profiles:member_id(id, full_name, avatar_url), memberships:membership_id(id, package_id, membership_packages:package_id(id, name))`,
+        `*, profiles!invoices_member_brand_fkey(id, full_name, avatar_url), memberships:membership_id(id, package_id, membership_packages:package_id(id, name))`,
         { count: 'exact' }
       )
       .eq('brand_id', profile.brand_id)
@@ -49,11 +49,11 @@ export async function getInvoices(filters?: {
       query = query.eq('status', filters.status)
     }
 
-    const { data, error, count } = await query
+    const { data: rawData, error, count } = await query
 
     if (error) return { data: [], count: 0, error: error.message }
 
-    return { data: (data ?? []) as InvoiceWithDetails[], count: count ?? 0 }
+    return { data: (rawData ?? []) as unknown as InvoiceWithDetails[], count: count ?? 0 }
   } catch (e) {
     return { data: [], count: 0, error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
@@ -65,10 +65,10 @@ export async function getInvoice(id: string): Promise<{ data?: InvoiceWithDetail
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
 
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('invoices')
       .select(
-        `*, profiles:member_id(id, full_name, avatar_url), memberships:membership_id(id, package_id, membership_packages:package_id(id, name))`
+        `*, profiles!invoices_member_brand_fkey(id, full_name, avatar_url), memberships:membership_id(id, package_id, membership_packages:package_id(id, name))`
       )
       .eq('id', id)
       .eq('brand_id', profile.brand_id)
@@ -76,7 +76,7 @@ export async function getInvoice(id: string): Promise<{ data?: InvoiceWithDetail
 
     if (error) return { error: error.message }
 
-    return { data: data as InvoiceWithDetails }
+    return { data: rawData as unknown as InvoiceWithDetails }
   } catch (e) {
     return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
@@ -162,7 +162,7 @@ export async function getMidtransSnapToken(
 
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
-      .select(`*, profiles:member_id(id, full_name, avatar_url)`)
+      .select(`*, profiles!invoices_member_brand_fkey(id, full_name, avatar_url)`)
       .eq('id', invoiceId)
       .eq('brand_id', profile.brand_id)
       .single()
@@ -291,17 +291,17 @@ export async function getMemberInvoices(): Promise<{
     const supabase = createClient()
     const { user } = await getAuthedProfile(supabase)
 
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('invoices')
       .select(
-        `*, profiles:member_id(id, full_name, avatar_url), memberships:membership_id(id, package_id, membership_packages:package_id(id, name))`
+        `*, profiles!invoices_member_brand_fkey(id, full_name, avatar_url), memberships:membership_id(id, package_id, membership_packages:package_id(id, name))`
       )
       .eq('member_id', user.id)
       .order('created_at', { ascending: false })
 
     if (error) return { data: [], error: error.message }
 
-    return { data: (data ?? []) as InvoiceWithDetails[] }
+    return { data: (rawData ?? []) as unknown as InvoiceWithDetails[] }
   } catch (e) {
     return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
