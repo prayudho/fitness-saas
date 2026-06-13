@@ -1,13 +1,15 @@
 'use client'
 
+import Link from 'next/link'
 import type { ColumnDef } from '@tanstack/react-table'
-import { MoreHorizontal, Pencil, Snowflake, XCircle } from 'lucide-react'
+import { MoreHorizontal, Pencil, Snowflake, XCircle, Eye } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { StatusBadge } from '@/components/shared/status-badge'
@@ -49,18 +51,21 @@ export function getMemberColumns(handlers: MemberColumnHandlers): ColumnDef<Memb
           .slice(0, 2)
 
         return (
-          <div className="flex items-center gap-3">
+          <Link
+            href={`/admin/members/${member.id}`}
+            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+          >
             <Avatar className="h-9 w-9">
               <AvatarImage src={undefined} alt={member.full_name ?? ''} />
               <AvatarFallback className="text-xs font-medium">{initials}</AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-medium text-sm leading-none">{member.full_name ?? '—'}</p>
+              <p className="font-medium text-sm leading-none hover:underline">{member.full_name ?? '—'}</p>
               {member.phone && (
                 <p className="text-xs text-muted-foreground mt-0.5">{member.phone}</p>
               )}
             </div>
-          </div>
+          </Link>
         )
       },
     },
@@ -127,6 +132,13 @@ export function getMemberColumns(handlers: MemberColumnHandlers): ColumnDef<Memb
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <Link href={`/admin/members/${member.id}`}>
+                  <Eye className="mr-2 h-4 w-4" />
+                  View Details
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => handlers.onEdit(member.id)}>
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit
