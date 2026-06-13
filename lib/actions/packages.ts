@@ -112,7 +112,7 @@ export async function createPackage(
         pt_session_credits:    input.pt_session_credits ?? null,
         pt_session_expiry_days: input.pt_session_expiry_days ?? null,
         duration_days:         effectiveDurationDays,
-        session_credits:       input.session_credits ?? null,
+        session_credits:       input.session_credits ?? input.pt_session_credits ?? null,
         pt_sessions_included:  input.pt_sessions_included ?? 0,
         price:                 input.price,
         currency:              input.currency ?? 'IDR',
