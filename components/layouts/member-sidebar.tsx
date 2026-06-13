@@ -16,7 +16,9 @@ import {
   LogOut,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { signOut } from '@/lib/actions/auth'
+import { useMobileNav } from '@/lib/stores/mobile-nav-store'
 
 const NAV_ITEMS = [
   { href: '/member', label: 'Dashboard', icon: Home },
@@ -50,6 +52,7 @@ export function MemberSidebar({ userName, userEmail, avatarUrl }: MemberSidebarP
   const pathname = usePathname()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const { isOpen, close } = useMobileNav()
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -69,6 +72,7 @@ export function MemberSidebar({ userName, userEmail, avatarUrl }: MemberSidebarP
   const collapsed = mounted ? isCollapsed : false
 
   return (
+    <>
     <aside
       className={`
         hidden md:flex flex-col
@@ -181,5 +185,69 @@ export function MemberSidebar({ userName, userEmail, avatarUrl }: MemberSidebarP
         </div>
       </div>
     </aside>
+
+    {/* Mobile navigation drawer */}
+    <Sheet open={isOpen} onOpenChange={(open) => { if (!open) close() }}>
+      <SheetContent side="left" className="p-0 w-64 flex flex-col">
+        <SheetTitle className="sr-only">Navigation</SheetTitle>
+        <div className="flex items-center gap-2 px-3 py-4 border-b shrink-0">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Dumbbell className="h-4 w-4" />
+          </div>
+          <span className="font-semibold text-sm">Member Portal</span>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
+          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+            const isActive =
+              href === '/member' ? pathname === '/member' : pathname.startsWith(href)
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={close}
+                className={`
+                  flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium
+                  transition-colors
+                  ${isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  }
+                `}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+              </Link>
+            )
+          })}
+        </nav>
+
+        <div className="border-t p-3 shrink-0">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-8 w-8 shrink-0">
+              <AvatarImage src={avatarUrl ?? undefined} />
+              <AvatarFallback className="text-xs">{getInitials(userName)}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 overflow-hidden min-w-0">
+              <p className="text-sm font-medium truncate leading-tight">{userName ?? 'Member'}</p>
+              <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary leading-none">
+                Member
+              </span>
+            </div>
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </form>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+    </>
   )
 }

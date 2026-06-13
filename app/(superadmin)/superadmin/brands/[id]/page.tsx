@@ -111,8 +111,8 @@ function InviteTeamMemberSheet({
       if (result.error) throw new Error(result.error)
       return result
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['team-members', brandId] })
+    onSuccess: async () => {
+      await qc.refetchQueries({ queryKey: ['team-members', brandId] })
       toast.success('Team member invited successfully!')
       form.reset({ brandId, fullName: '', email: '', phone: '', role: 'staff', tempPassword: '' })
       onOpenChange(false)

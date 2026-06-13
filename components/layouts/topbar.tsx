@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { Menu } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -12,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { signOut } from '@/lib/actions/auth'
+import { useMobileNav } from '@/lib/stores/mobile-nav-store'
 
 interface TopBarProps {
   userName?: string
@@ -19,8 +19,6 @@ interface TopBarProps {
   userRole?: string
   brandName?: string
 }
-
-const MOBILE_NAV_KEY = 'mobile-nav-open'
 
 function getProfileHref(role?: string): string {
   switch (role) {
@@ -49,26 +47,14 @@ function getInitials(name?: string): string {
 }
 
 export function TopBar({ userName, userEmail, userRole, brandName }: TopBarProps) {
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
-
-  useEffect(() => {
-    const stored = sessionStorage.getItem(MOBILE_NAV_KEY)
-    setMobileNavOpen(stored === 'true')
-  }, [])
-
-  function toggleMobileNav() {
-    const next = !mobileNavOpen
-    setMobileNavOpen(next)
-    sessionStorage.setItem(MOBILE_NAV_KEY, String(next))
-  }
-
+  const { toggle } = useMobileNav()
   const profileHref = getProfileHref(userRole)
 
   return (
     <header className="h-14 border-b bg-background/95 backdrop-blur sticky top-0 z-40 flex items-center px-4 gap-3">
       {/* Mobile menu trigger */}
       <button
-        onClick={toggleMobileNav}
+        onClick={toggle}
         className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors md:hidden"
         aria-label="Toggle mobile navigation"
       >

@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import type { ColumnDef } from '@tanstack/react-table'
 import { PageHeader } from '@/components/shared/page-header'
@@ -120,11 +120,11 @@ const sessionColumns: ColumnDef<TrainerSessionWithMember>[] = [
 ]
 
 interface PageProps {
-  params: Promise<{ id: string }>
+  params: { id: string }
 }
 
 export default function TrainerDetailPage({ params }: PageProps) {
-  const { id } = use(params)
+  const { id } = params
   const { data: trainer, isLoading } = useTrainer(id)
   const [activeTab, setActiveTab] = useState('profile')
 
