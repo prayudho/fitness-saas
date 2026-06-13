@@ -1,4 +1,4 @@
-import { headers } from 'next/headers'
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
 
@@ -11,7 +11,7 @@ export async function getAuthedProfile(
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) throw new Error('Unauthorized')
 
-  const brandId = headers().get('x-brand-id')
+  const brandId = cookies().get('__fp_brand_id')?.value ?? null
 
   const query = supabase.from('profiles').select('*').eq('id', user.id)
   const { data: profile, error: profileError } = await (
@@ -23,5 +23,5 @@ export async function getAuthedProfile(
 }
 
 export function getServerBrandId(): string | null {
-  return headers().get('x-brand-id')
+  return cookies().get('__fp_brand_id')?.value ?? null
 }

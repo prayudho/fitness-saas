@@ -1,18 +1,20 @@
 import { createServerClient } from '@supabase/ssr'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { cookies, headers } from 'next/headers'
+import { cookies } from 'next/headers'
 import type { Database } from '@/types/database'
 
 export function createClient() {
   const cookieStore = cookies()
-  const brandId     = headers().get('x-brand-id')
+  // Read brand UUID from the __fp_brand_id cookie set by middleware.
+  // Next.js 14: middleware response cookies are accessible via cookies() in server components,
+  // but middleware response headers are NOT accessible via headers() — only request headers are.
+  const brandId = cookieStore.get('__fp_brand_id')?.value ?? null
 
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      // Forward brand UUID so PostgREST can call get_my_brand_id() inside
-      // RLS policies.  Matches the header the browser client also sends.
+      // Forward brand UUID so PostgREST can call get_my_brand_id() inside RLS policies.
       global: brandId
         ? { headers: { 'x-brand-id': brandId } }
         : undefined,

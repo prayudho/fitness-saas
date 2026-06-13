@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { headers } from 'next/headers'
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { AdminSidebar } from '@/components/layouts/admin-sidebar'
 import { TopBar } from '@/components/layouts/topbar'
@@ -17,7 +17,7 @@ export default async function AdminLayout({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const brandId = headers().get('x-brand-id')
+  const brandId = cookies().get('__fp_brand_id')?.value ?? null
 
   // Resolve role from the per-brand profile (supports multi-brand users)
   let profileRole: string | null = null

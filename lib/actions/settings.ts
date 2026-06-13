@@ -1,5 +1,6 @@
 'use server'
 
+import { cookies } from 'next/headers'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
@@ -15,15 +16,14 @@ export async function getBrandSettings() {
     return { data: null, error: 'Unauthorized' }
   }
 
-  // Resolve brand_id from the x-brand-id header (set by middleware from subdomain)
-  const { headers: getHeaders } = await import('next/headers')
-  const brandIdFromHeader = getHeaders().get('x-brand-id')
+  // Resolve brand_id from the cookie set by middleware
+  const brandIdFromCookie = cookies().get('__fp_brand_id')?.value ?? null
 
-  if (!brandIdFromHeader) {
+  if (!brandIdFromCookie) {
     return { data: null, error: 'Could not resolve brand for this request' }
   }
 
-  const profile = { brand_id: brandIdFromHeader }
+  const profile = { brand_id: brandIdFromCookie }
 
   const { data, error } = await supabase
     .from('brands')

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { headers } from 'next/headers'
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { MemberSidebar } from '@/components/layouts/member-sidebar'
 import { TopBar } from '@/components/layouts/topbar'
@@ -16,9 +16,7 @@ export default async function MemberLayout({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const headersList = headers()
-  const subdomain   = headersList.get('x-tenant-subdomain')
-  const brandId     = headersList.get('x-brand-id')
+  const brandId = cookies().get('__fp_brand_id')?.value ?? null
 
   // Resolve profile for the current brand
   let profileRole: string | null = null
@@ -48,12 +46,11 @@ export default async function MemberLayout({
   // Fetch brand theme
   type BrandTheme = { name: string; primary_color: string; logo_url?: string | null }
   let brand: BrandTheme | null = null
-  if (subdomain) {
+  if (brandId) {
     const brandResult = await supabase
       .from('brands')
       .select('name, logo_url, primary_color')
-      .eq('slug', subdomain)
-      .eq('is_active', true)
+      .eq('id', brandId)
       .maybeSingle()
     brand = (brandResult.data as unknown) as BrandTheme | null
   }

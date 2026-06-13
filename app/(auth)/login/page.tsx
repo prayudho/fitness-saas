@@ -1,22 +1,20 @@
-import { headers } from 'next/headers'
+import { cookies } from 'next/headers'
 import { createServiceClient } from '@/lib/supabase/server'
 import LoginForm from './login-form'
 
 export default async function LoginPage() {
-  const headersList = headers()
-  const subdomain = headersList.get('x-tenant-subdomain')
+  const brandId = cookies().get('__fp_brand_id')?.value ?? null
 
   let brandName: string | null = null
   let brandLogo: string | null = null
   let brandColor: string | null = null
 
-  if (subdomain) {
+  if (brandId) {
     const supabase = createServiceClient()
     const { data: brand } = await supabase
       .from('brands')
       .select('name, logo_url, primary_color')
-      .eq('slug', subdomain)
-      .eq('is_active', true)
+      .eq('id', brandId)
       .single()
 
     brandName = brand?.name ?? null

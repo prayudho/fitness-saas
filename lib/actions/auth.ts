@@ -1,6 +1,6 @@
 'use server'
 
-import { headers } from 'next/headers'
+import { cookies } from 'next/headers'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -15,8 +15,8 @@ export async function signIn(
 
   if (error) return { error: error.message, role: null }
 
-  // Resolve brand context from the subdomain header set by middleware
-  const brandId = headers().get('x-brand-id')
+  // Resolve brand context from the cookie set by middleware
+  const brandId = cookies().get('__fp_brand_id')?.value ?? null
 
   if (brandId) {
     const profileResult = await supabase
@@ -165,7 +165,7 @@ export async function setMustChangePasswordFalse(): Promise<{ error: string | nu
   if (!user) return { error: 'Not authenticated' }
 
   const serviceClient = createServiceClient()
-  const brandId = headers().get('x-brand-id')
+  const brandId = cookies().get('__fp_brand_id')?.value ?? null
 
   // Update only the profile at the current brand (password flag is brand-scoped)
   const query = serviceClient.from('profiles').update({ must_change_password: false }).eq('id', user.id)
