@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getAuthedProfile } from '@/lib/actions/utils'
+import { checkMemberAccessStatus, type MemberAccessStatus } from '@/lib/actions/membership.actions'
 import type { Database } from '@/types/database'
 
 type Row<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
@@ -14,13 +15,16 @@ type ProfileRow = Row<'profiles'>
 
 export type CheckinResult = {
   success: boolean
-  status: 'success' | 'warning' | 'denied'
+  // 'override_required' = gym expired but PT still active; staff must decide
+  status: 'success' | 'warning' | 'denied' | 'override_required'
   message: string
   member: { full_name: string | null; avatar_url: string | null }
   membership?: {
+    id?: string
     expires_at: string | null
     membership_packages: { name: string } | null
   } | null
+  accessStatus?: MemberAccessStatus | null
 }
 
 export type CheckinWithProfile = CheckinRow & {
@@ -32,6 +36,8 @@ export type MemberSearchResult = ProfileRow & {
     membership_packages: MembershipPackageRow | null
   })[]
 }
+
+export { MemberAccessStatus }
 
 export async function processCheckin(input: {
   member_id: string
@@ -72,7 +78,7 @@ export async function processCheckin(input: {
       .select('*, membership_packages(name)')
       .eq('member_id', input.member_id)
       .eq('brand_id', staffProfile.brand_id)
-      .eq('status', 'active')
+      .in('status', ['active', 'frozen'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -86,35 +92,80 @@ export async function processCheckin(input: {
       }
     }
 
-    // Insert checkin
+    // Check access status using the new logic
+    const { data: accessStatus } = await checkMemberAccessStatus(membership.id)
+
+    if (!accessStatus) {
+      return {
+        success: false,
+        status: 'denied',
+        message: 'Unable to verify access status',
+        member: { full_name: memberProfile.full_name, avatar_url: memberProfile.avatar_url },
+      }
+    }
+
+    const memberInfo = {
+      full_name: memberProfile.full_name,
+      avatar_url: memberProfile.avatar_url,
+    }
+
+    const membershipInfo = {
+      id:                  membership.id,
+      expires_at:          membership.expires_at,
+      membership_packages: membership.membership_packages as { name: string } | null,
+    }
+
+    // Case: all access denied (gym expired, no PT sessions either)
+    if (!accessStatus.canEnterGym && !accessStatus.hasPTSessions) {
+      return {
+        success: false,
+        status: 'denied',
+        message: 'Access denied — membership expired',
+        member: memberInfo,
+        membership: membershipInfo,
+        accessStatus,
+      }
+    }
+
+    // Case: gym expired but PT sessions still active — staff must decide
+    if (!accessStatus.canEnterGym && accessStatus.hasPTSessions) {
+      return {
+        success: false,
+        status: 'override_required',
+        message: accessStatus.warningMessage ?? 'Gym access expired. PT Sessions still active.',
+        member: memberInfo,
+        membership: membershipInfo,
+        accessStatus,
+      }
+    }
+
+    // Insert checkin for normal/warning cases
+    const warningMessage =
+      accessStatus.warningMessage && !accessStatus.warningMessage.includes('expired')
+        ? accessStatus.warningMessage
+        : null
+
     await supabase.from('checkins').insert({
-      brand_id: staffProfile.brand_id,
-      member_id: input.member_id,
-      membership_id: membership.id,
-      method: input.method,
-      checked_in_at: new Date().toISOString(),
+      brand_id:       staffProfile.brand_id,
+      member_id:      input.member_id,
+      membership_id:  membership.id,
+      method:         input.method,
+      checked_in_at:  new Date().toISOString(),
+      staff_override: null,
+      warning_message: warningMessage,
     })
 
     revalidatePath('/staff/checkin')
 
-    // Check if expiring within 7 days
-    if (membership.expires_at) {
-      const expiresAt = new Date(membership.expires_at)
-      const now = new Date()
-      const diffMs = expiresAt.getTime() - now.getTime()
-      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-
-      if (diffDays <= 7 && diffDays >= 0) {
-        return {
-          success: true,
-          status: 'warning',
-          message: `Membership expires in ${diffDays} day${diffDays === 1 ? '' : 's'}`,
-          member: { full_name: memberProfile.full_name, avatar_url: memberProfile.avatar_url },
-          membership: {
-            expires_at: membership.expires_at,
-            membership_packages: membership.membership_packages as { name: string } | null,
-          },
-        }
+    // Case: expiring soon (7 days or less)
+    if (accessStatus.warningMessage) {
+      return {
+        success: true,
+        status: 'warning',
+        message: accessStatus.warningMessage,
+        member: memberInfo,
+        membership: membershipInfo,
+        accessStatus,
       }
     }
 
@@ -122,11 +173,9 @@ export async function processCheckin(input: {
       success: true,
       status: 'success',
       message: 'Welcome back!',
-      member: { full_name: memberProfile.full_name, avatar_url: memberProfile.avatar_url },
-      membership: {
-        expires_at: membership.expires_at,
-        membership_packages: membership.membership_packages as { name: string } | null,
-      },
+      member: memberInfo,
+      membership: membershipInfo,
+      accessStatus,
     }
   } catch (e) {
     return {
@@ -135,6 +184,41 @@ export async function processCheckin(input: {
       message: e instanceof Error ? e.message : 'An error occurred',
       member: { full_name: null, avatar_url: null },
     }
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// recordCheckinWithOverride
+// Called when staff clicks "Allow Entry" or "Deny Entry" after an
+// override_required result. Creates the checkin row with staff_override set.
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function recordCheckinWithOverride(input: {
+  member_id: string
+  membership_id: string
+  method: 'qr' | 'staff' | 'gate'
+  allowed: boolean
+  warning_message: string | null
+}): Promise<{ error?: string }> {
+  try {
+    const supabase = createClient()
+    const { profile: staffProfile } = await getAuthedProfile(supabase)
+    if (!staffProfile.brand_id) return { error: 'No brand context' }
+
+    await supabase.from('checkins').insert({
+      brand_id:        staffProfile.brand_id,
+      member_id:       input.member_id,
+      membership_id:   input.membership_id,
+      method:          input.method,
+      checked_in_at:   new Date().toISOString(),
+      staff_override:  input.allowed,
+      warning_message: input.warning_message,
+    })
+
+    revalidatePath('/staff/checkin')
+    return {}
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'An error occurred' }
   }
 }
 
@@ -221,7 +305,6 @@ export async function createWalkinPass(
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
 
-    // Fetch the day_pass package
     const { data: pkg, error: pkgError } = await supabase
       .from('membership_packages')
       .select('*')
@@ -234,18 +317,21 @@ export async function createWalkinPass(
 
     const today = new Date().toISOString().split('T')[0]
 
-    // Insert membership valid only for today
     const { data: membership, error: membershipError } = await supabase
       .from('memberships')
       .insert({
-        brand_id: profile.brand_id,
-        member_id: memberId,
-        package_id: packageId,
-        status: 'active',
-        starts_at: today,
-        expires_at: `${today}T23:59:59.999Z`,
-        sessions_remaining: pkg.session_credits ?? null,
-        auto_renew: false,
+        brand_id:              profile.brand_id,
+        member_id:             memberId,
+        package_id:            packageId,
+        status:                'active',
+        starts_at:             today,
+        expires_at:            `${today}T23:59:59.999Z`,
+        sessions_remaining:    pkg.session_credits ?? null,
+        auto_renew:            false,
+        package_category:      'gym_access',
+        gym_access_expires_at: `${today}T23:59:59.999Z`,
+        gym_access_status:     'active',
+        pt_sessions_status:    'active',
       })
       .select()
       .single()
@@ -254,17 +340,16 @@ export async function createWalkinPass(
       return { error: membershipError?.message ?? 'Failed to create membership' }
     }
 
-    // Insert invoice
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
       .insert({
-        brand_id: profile.brand_id,
-        member_id: memberId,
+        brand_id:      profile.brand_id,
+        member_id:     memberId,
         membership_id: membership.id,
-        amount: pkg.price,
-        currency: pkg.currency,
-        status: 'pending',
-        notes: 'Walk-in day pass',
+        amount:        pkg.price,
+        currency:      pkg.currency,
+        status:        'pending',
+        notes:         'Walk-in day pass',
       })
       .select()
       .single()
@@ -273,13 +358,12 @@ export async function createWalkinPass(
       return { error: invoiceError?.message ?? 'Failed to create invoice' }
     }
 
-    // Insert check-in
     await supabase.from('checkins').insert({
-      brand_id: profile.brand_id,
-      member_id: memberId,
-      membership_id: membership.id,
-      method: 'staff',
-      checked_in_at: new Date().toISOString(),
+      brand_id:       profile.brand_id,
+      member_id:      memberId,
+      membership_id:  membership.id,
+      method:         'staff',
+      checked_in_at:  new Date().toISOString(),
     })
 
     revalidatePath('/staff/checkin')

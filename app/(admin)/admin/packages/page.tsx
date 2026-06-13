@@ -9,7 +9,6 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CardSkeleton } from '@/components/shared/skeleton-loaders'
@@ -29,17 +28,27 @@ import type { Database } from '@/types/database'
 
 type PackageRow = Database['public']['Tables']['membership_packages']['Row']
 type PromoCodeRow = Database['public']['Tables']['promo_codes']['Row']
+type CategoryFilter = 'all' | 'gym_access' | 'pt_sessions' | 'bundled'
 
 export default function PackagesPage() {
   const [packageSheetOpen, setPackageSheetOpen] = React.useState(false)
   const [editingPackage, setEditingPackage] = React.useState<PackageRow | null>(null)
   const [promoSheetOpen, setPromoSheetOpen] = React.useState(false)
   const [editingPromo, setEditingPromo] = React.useState<PromoCodeRow | null>(null)
+  const [categoryFilter, setCategoryFilter] = React.useState<CategoryFilter>('all')
 
   const { data: packages, isLoading: packagesLoading } = usePackages()
   const { data: promoCodes, isLoading: promoLoading } = usePromoCodes()
   const deletePackageMutation = useDeletePackage()
   const deletePromoMutation = useDeletePromoCode()
+
+  const filteredPackages = React.useMemo(() => {
+    if (!packages) return []
+    if (categoryFilter === 'all') return packages
+    return packages.filter(
+      (p) => ((p as unknown as Record<string, unknown>).package_category ?? 'gym_access') === categoryFilter
+    )
+  }, [packages, categoryFilter])
 
   function openEditPackage(pkg: PackageRow) {
     setEditingPackage(pkg)
@@ -103,21 +112,57 @@ export default function PackagesPage() {
 
         {/* Packages Tab */}
         <TabsContent value="packages">
+          {/* Category filter tabs */}
+          <div className="flex gap-2 mb-4">
+            {(
+              [
+                { value: 'all',         label: 'All' },
+                { value: 'gym_access',  label: 'Gym Access' },
+                { value: 'pt_sessions', label: 'PT Sessions' },
+                { value: 'bundled',     label: 'Bundled' },
+              ] as { value: CategoryFilter; label: string }[]
+            ).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setCategoryFilter(opt.value)}
+                className={
+                  categoryFilter === opt.value
+                    ? 'rounded-full border border-primary bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground'
+                    : 'rounded-full border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:border-primary hover:text-foreground transition-colors'
+                }
+              >
+                {opt.label}
+                {opt.value !== 'all' && packages && (
+                  <span className="ml-1.5 opacity-60">
+                    {packages.filter(
+                      (p) =>
+                        ((p as unknown as Record<string, unknown>).package_category ?? 'gym_access') === opt.value
+                    ).length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
           {packagesLoading ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <CardSkeleton />
               <CardSkeleton />
               <CardSkeleton />
             </div>
-          ) : !packages || packages.length === 0 ? (
+          ) : !filteredPackages || filteredPackages.length === 0 ? (
             <EmptyState
-              title="No packages yet"
-              description="Create your first membership package to get started."
+              title={categoryFilter === 'all' ? 'No packages yet' : `No ${categoryFilter.replace('_', ' ')} packages`}
+              description={
+                categoryFilter === 'all'
+                  ? 'Create your first membership package to get started.'
+                  : `Create a ${categoryFilter.replace('_', ' ')} package to see it here.`
+              }
               action={{ label: 'Add Package', onClick: openAddPackage }}
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {packages.map((pkg) => (
+              {filteredPackages.map((pkg) => (
                 <PackageCard
                   key={pkg.id}
                   pkg={pkg}

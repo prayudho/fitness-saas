@@ -80,6 +80,27 @@ export default function ReportsPage() {
 
       {/* Row 5: Trainer Performance (full width) */}
       <TrainerPerformanceTable data={trainerPerfData} isLoading={trainerLoading} />
+
+      {/* Row 6: Quick-access report links */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <a
+          href="/admin/reports/expiry"
+          className="group flex flex-col gap-2 rounded-xl border p-5 hover:border-primary hover:shadow-sm transition-all"
+        >
+          <div className="flex items-center gap-2">
+            <span className="rounded-lg bg-amber-100 p-2 text-amber-700 group-hover:bg-amber-200 transition-colors">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </span>
+            <span className="font-semibold text-sm">Expiry Report</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Members with upcoming gym access or PT session expiry. Track low PT credits and expiry
+            ordering anomalies.
+          </p>
+        </a>
+      </div>
     </div>
   )
 }

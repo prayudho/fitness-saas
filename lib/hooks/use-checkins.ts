@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   processCheckin,
+  recordCheckinWithOverride,
   searchMemberForCheckin,
   getCheckinLog,
   getOccupancyCount,
@@ -25,12 +26,40 @@ export function useProcessCheckin() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (input: { member_id: string; method: 'qr' | 'staff' | 'gate' }) => {
-      const result = await processCheckin(input)
-      return result
+      return processCheckin(input)
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // Only invalidate log/occupancy for actual check-ins (not override_required)
+      if (result.status !== 'override_required') {
+        qc.invalidateQueries({ queryKey: ['checkin-log'] })
+        qc.invalidateQueries({ queryKey: ['occupancy'] })
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+export function useRecordCheckinWithOverride() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: {
+      member_id: string
+      membership_id: string
+      method: 'qr' | 'staff' | 'gate'
+      allowed: boolean
+      warning_message: string | null
+    }) => {
+      const result = await recordCheckinWithOverride(input)
+      if (result.error) throw new Error(result.error)
+    },
+    onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['checkin-log'] })
       qc.invalidateQueries({ queryKey: ['occupancy'] })
+      if (vars.allowed) {
+        toast.success('Entry allowed — recorded with staff override')
+      } else {
+        toast('Entry denied — recorded')
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   })

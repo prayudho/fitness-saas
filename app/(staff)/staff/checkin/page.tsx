@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { QrCode, Search, Clock, Smartphone } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -8,64 +8,74 @@ import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { QRScanner } from '@/components/checkin/qr-scanner'
 import { CheckinResult } from '@/components/checkin/checkin-result'
+import type { CheckinResultData } from '@/components/checkin/checkin-result'
 import { MemberSearch } from '@/components/checkin/member-search'
 import { OccupancyCounter } from '@/components/checkin/occupancy-counter'
-import { useProcessCheckin, useCheckinLog } from '@/lib/hooks/use-checkins'
-import type { CheckinResult as CheckinResultType } from '@/lib/actions/checkins'
+import { useProcessCheckin, useCheckinLog, useRecordCheckinWithOverride } from '@/lib/hooks/use-checkins'
 import { formatRelativeTime } from '@/lib/utils'
 
 export default function CheckinPage() {
-  const [checkinResult, setCheckinResult] = useState<CheckinResultType | null>(null)
+  const [checkinResult, setCheckinResult] = useState<CheckinResultData | null>(null)
+  const lastInputRef = useRef<{ member_id: string; membership_id?: string; method: 'qr' | 'staff' | 'gate' }>()
+
   const processCheckin = useProcessCheckin()
+  const recordOverride = useRecordCheckinWithOverride()
   const { data: recentCheckins } = useCheckinLog(10)
 
   const handleCheckin = useCallback(
     async (memberId: string, method: 'qr' | 'staff' | 'gate' = 'staff') => {
+      lastInputRef.current = { member_id: memberId, method }
       const result = await processCheckin.mutateAsync({ member_id: memberId, method })
       if (result) {
-        setCheckinResult(result)
+        if (result.membership?.id) {
+          lastInputRef.current.membership_id = result.membership.id
+        }
+        setCheckinResult(result as CheckinResultData)
       }
     },
     [processCheckin]
   )
 
   const handleQRScan = useCallback(
-    (memberId: string) => {
-      handleCheckin(memberId, 'qr')
-    },
+    (memberId: string) => handleCheckin(memberId, 'qr'),
     [handleCheckin]
   )
 
-  const handleReset = useCallback(() => {
-    setCheckinResult(null)
-  }, [])
+  const handleReset = useCallback(() => setCheckinResult(null), [])
+
+  const handleOverride = useCallback(
+    async (allowed: boolean) => {
+      const last = lastInputRef.current
+      const membershipId = checkinResult?.membership?.id ?? last?.membership_id
+      if (!last?.member_id || !membershipId) return
+
+      await recordOverride.mutateAsync({
+        member_id:       last.member_id,
+        membership_id:   membershipId,
+        method:          last.method,
+        allowed,
+        warning_message: checkinResult?.message ?? null,
+      })
+    },
+    [checkinResult, recordOverride]
+  )
 
   function getMethodLabel(method: string) {
     switch (method) {
-      case 'qr':
-        return 'QR'
-      case 'staff':
-        return 'Staff'
-      case 'gate':
-        return 'Gate'
-      default:
-        return method
+      case 'qr':    return 'QR'
+      case 'staff': return 'Staff'
+      case 'gate':  return 'Gate'
+      default:      return method
     }
   }
 
   function getInitials(name: string | null) {
     if (!name) return '?'
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2)
+    return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <PageHeader
           title="Check-in Station"
@@ -75,9 +85,14 @@ export default function CheckinPage() {
       </div>
 
       {/* Result overlay */}
-      <CheckinResult result={checkinResult} onReset={handleReset} />
+      <CheckinResult
+        result={checkinResult}
+        memberId={lastInputRef.current?.member_id}
+        lastMethod={lastInputRef.current?.method}
+        onReset={handleReset}
+        onOverride={handleOverride}
+      />
 
-      {/* Main check-in interface */}
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
           <Tabs defaultValue="qr">
@@ -126,27 +141,46 @@ export default function CheckinPage() {
             </div>
           ) : (
             <ul className="divide-y max-h-[420px] overflow-y-auto">
-              {recentCheckins.map((checkin) => (
-                <li key={checkin.id} className="flex items-center gap-3 px-4 py-3">
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarImage src={checkin.profiles?.avatar_url ?? undefined} />
-                    <AvatarFallback className="text-xs">
-                      {getInitials(checkin.profiles?.full_name ?? null)}
-                    </AvatarFallback>
-                  </Avatar>
+              {recentCheckins.map((checkin) => {
+                const overrideFlag = (checkin as unknown as Record<string, unknown>).staff_override
+                const warningMsg   = (checkin as unknown as Record<string, unknown>).warning_message as string | null
 
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {checkin.profiles?.full_name ?? 'Unknown'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatRelativeTime(checkin.checked_in_at)}
-                    </p>
-                  </div>
+                return (
+                  <li key={checkin.id} className="flex items-center gap-3 px-4 py-3">
+                    <Avatar className="h-8 w-8 shrink-0">
+                      <AvatarFallback className="text-xs">
+                        {getInitials(checkin.profiles?.full_name ?? null)}
+                      </AvatarFallback>
+                    </Avatar>
 
-                  <StatusBadge status={getMethodLabel(checkin.method)} className="shrink-0" />
-                </li>
-              ))}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-medium truncate">
+                          {checkin.profiles?.full_name ?? 'Unknown'}
+                        </p>
+                        {overrideFlag === true && (
+                          <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-700 shrink-0">
+                            Override
+                          </span>
+                        )}
+                        {overrideFlag === false && (
+                          <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700 shrink-0">
+                            Denied
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {formatRelativeTime(checkin.checked_in_at)}
+                      </p>
+                      {warningMsg && (
+                        <p className="text-[10px] text-amber-600 truncate mt-0.5">{warningMsg}</p>
+                      )}
+                    </div>
+
+                    <StatusBadge status={getMethodLabel(checkin.method)} className="shrink-0" />
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>

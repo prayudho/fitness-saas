@@ -16,10 +16,16 @@ const typeConfig: Record<
   PackageRow['type'],
   { label: string; className: string }
 > = {
-  monthly: { label: 'Monthly', className: 'bg-blue-100 text-blue-800 border-blue-200' },
-  annual: { label: 'Annual', className: 'bg-purple-100 text-purple-800 border-purple-200' },
+  monthly:  { label: 'Monthly',  className: 'bg-blue-100 text-blue-800 border-blue-200' },
+  annual:   { label: 'Annual',   className: 'bg-purple-100 text-purple-800 border-purple-200' },
   sessions: { label: 'Sessions', className: 'bg-green-100 text-green-800 border-green-200' },
   day_pass: { label: 'Day Pass', className: 'bg-orange-100 text-orange-800 border-orange-200' },
+}
+
+const categoryConfig: Record<string, { label: string; className: string }> = {
+  gym_access:  { label: 'Gym Access',  className: 'bg-blue-100 text-blue-700 border-blue-200' },
+  pt_sessions: { label: 'PT Sessions', className: 'bg-purple-100 text-purple-700 border-purple-200' },
+  bundled:     { label: 'Bundled',     className: 'bg-teal-100 text-teal-700 border-teal-200' },
 }
 
 interface PackageCardProps {
@@ -33,18 +39,33 @@ export function PackageCard({ pkg, onEdit, onDelete }: PackageCardProps) {
   const deleteMutation = useDeletePackage()
 
   const typeInfo = typeConfig[pkg.type]
+  const pkgAny = pkg as unknown as Record<string, unknown>
+  const category = (pkgAny.package_category as string | undefined) ?? 'gym_access'
+  const categoryInfo = categoryConfig[category] ?? categoryConfig.gym_access
+
+  const gymAccessDays = (pkgAny.gym_access_days as number | undefined) ?? pkg.duration_days
+  const ptCredits = pkgAny.pt_session_credits as number | undefined
+  const ptExpiryDays = pkgAny.pt_session_expiry_days as number | undefined
 
   return (
     <Card className={cn('flex flex-col', !pkg.is_active && 'opacity-50')}>
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-base leading-snug">{pkg.name}</CardTitle>
-          <Badge
-            variant="outline"
-            className={cn('shrink-0 text-xs font-medium', typeInfo.className)}
-          >
-            {typeInfo.label}
-          </Badge>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <Badge
+              variant="outline"
+              className={cn('text-xs font-medium', categoryInfo.className)}
+            >
+              {categoryInfo.label}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={cn('text-xs font-medium', typeInfo.className)}
+            >
+              {typeInfo.label}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
 
@@ -54,11 +75,14 @@ export function PackageCard({ pkg, onEdit, onDelete }: PackageCardProps) {
         </p>
 
         <div className="space-y-1 text-sm text-muted-foreground">
-          {pkg.duration_days != null && (
-            <p>{pkg.duration_days} days</p>
+          {(category === 'gym_access' || category === 'bundled') && gymAccessDays != null && (
+            <p>{gymAccessDays} days gym access</p>
           )}
-          {pkg.session_credits != null && pkg.session_credits > 0 && (
-            <p>{pkg.session_credits} session credits</p>
+          {(category === 'pt_sessions' || category === 'bundled') && ptCredits != null && (
+            <p>
+              {ptCredits} PT session{ptCredits === 1 ? '' : 's'}
+              {ptExpiryDays ? ` · expires in ${ptExpiryDays} days` : ''}
+            </p>
           )}
           {pkg.allow_freeze && (
             <Badge variant="secondary" className="text-xs">

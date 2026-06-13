@@ -10,10 +10,20 @@ type PromoCodeRow = Database['public']['Tables']['promo_codes']['Row']
 type MembershipType = Database['public']['Tables']['membership_packages']['Row']['type']
 type DiscountType = Database['public']['Tables']['promo_codes']['Row']['discount_type']
 
+export type PackageCategory = 'gym_access' | 'pt_sessions' | 'bundled'
+
 export interface PackageInput {
   name: string
   type: MembershipType
-  duration_days: number
+  package_category: PackageCategory
+  // gym_access or bundled: how many days of gym entry the package grants
+  gym_access_days?: number
+  // pt_sessions or bundled: number of PT session credits
+  pt_session_credits?: number
+  // pt_sessions or bundled: PT credits expire N days from activation
+  pt_session_expiry_days?: number
+  // kept for backward compatibility; new code should use gym_access_days
+  duration_days?: number
   session_credits?: number
   pt_sessions_included?: number
   price: number
@@ -88,19 +98,26 @@ export async function createPackage(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
 
+    // Derive duration_days from gym_access_days for backward compatibility
+    const effectiveDurationDays = input.gym_access_days ?? input.duration_days ?? null
+
     const { data, error } = await supabase
       .from('membership_packages')
       .insert({
-        brand_id: profile.brand_id!,
-        name: input.name,
-        type: input.type,
-        duration_days: input.duration_days,
-        session_credits: input.session_credits ?? null,
-        pt_sessions_included: input.pt_sessions_included ?? 0,
-        price: input.price,
-        currency: input.currency ?? 'IDR',
-        allow_freeze: input.allow_freeze ?? false,
-        max_freeze_days: input.max_freeze_days ?? null,
+        brand_id:              profile.brand_id!,
+        name:                  input.name,
+        type:                  input.type,
+        package_category:      input.package_category,
+        gym_access_days:       input.gym_access_days ?? null,
+        pt_session_credits:    input.pt_session_credits ?? null,
+        pt_session_expiry_days: input.pt_session_expiry_days ?? null,
+        duration_days:         effectiveDurationDays,
+        session_credits:       input.session_credits ?? null,
+        pt_sessions_included:  input.pt_sessions_included ?? 0,
+        price:                 input.price,
+        currency:              input.currency ?? 'IDR',
+        allow_freeze:          input.allow_freeze ?? false,
+        max_freeze_days:       input.max_freeze_days ?? null,
       })
       .select()
       .single()
@@ -124,6 +141,14 @@ export async function updatePackage(
     const updateData: Database['public']['Tables']['membership_packages']['Update'] = {}
     if (input.name !== undefined) updateData.name = input.name
     if (input.type !== undefined) updateData.type = input.type
+    if (input.package_category !== undefined) updateData.package_category = input.package_category
+    if (input.gym_access_days !== undefined) {
+      updateData.gym_access_days = input.gym_access_days
+      // Keep duration_days in sync
+      updateData.duration_days = input.gym_access_days
+    }
+    if (input.pt_session_credits !== undefined) updateData.pt_session_credits = input.pt_session_credits
+    if (input.pt_session_expiry_days !== undefined) updateData.pt_session_expiry_days = input.pt_session_expiry_days
     if (input.duration_days !== undefined) updateData.duration_days = input.duration_days
     if (input.session_credits !== undefined) updateData.session_credits = input.session_credits
     if (input.pt_sessions_included !== undefined) updateData.pt_sessions_included = input.pt_sessions_included
@@ -232,13 +257,13 @@ export async function createPromoCode(
     const { data, error } = await supabase
       .from('promo_codes')
       .insert({
-        brand_id: profile.brand_id!,
-        code: input.code.toUpperCase(),
-        discount_type: input.discount_type,
+        brand_id:       profile.brand_id!,
+        code:           input.code.toUpperCase(),
+        discount_type:  input.discount_type,
         discount_value: input.discount_value,
-        max_uses: input.max_uses ?? null,
-        valid_from: input.valid_from ?? new Date().toISOString(),
-        valid_until: input.valid_until ?? null,
+        max_uses:       input.max_uses ?? null,
+        valid_from:     input.valid_from ?? new Date().toISOString(),
+        valid_until:    input.valid_until ?? null,
       })
       .select()
       .single()

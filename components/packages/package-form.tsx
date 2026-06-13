@@ -3,6 +3,7 @@
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { Dumbbell, User, Layers, Info } from 'lucide-react'
 import {
   Form,
   FormControl,
@@ -22,22 +23,53 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 import { useCreatePackage, useUpdatePackage } from '@/lib/hooks/use-packages'
 import type { Database } from '@/types/database'
+import type { PackageCategory } from '@/lib/actions/packages'
 
 type PackageRow = Database['public']['Tables']['membership_packages']['Row']
 
-const schema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  type: z.enum(['monthly', 'annual', 'sessions', 'day_pass']),
-  duration_days: z.coerce.number().min(1, 'Must be at least 1 day'),
-  session_credits: z.coerce.number().optional(),
-  pt_sessions_included: z.coerce.number().min(0).default(0),
-  price: z.coerce.number().min(0, 'Price must be 0 or more'),
-  currency: z.string().default('IDR'),
-  allow_freeze: z.boolean().default(false),
-  max_freeze_days: z.coerce.number().optional(),
-})
+const schema = z
+  .object({
+    name:                  z.string().min(1, 'Name is required'),
+    type:                  z.enum(['monthly', 'annual', 'sessions', 'day_pass']),
+    package_category:      z.enum(['gym_access', 'pt_sessions', 'bundled']),
+    gym_access_days:       z.coerce.number().min(1).optional(),
+    pt_session_credits:    z.coerce.number().min(1).optional(),
+    pt_session_expiry_days: z.coerce.number().min(1).optional(),
+    price:                 z.coerce.number().min(0, 'Price must be 0 or more'),
+    currency:              z.string().default('IDR'),
+    allow_freeze:          z.boolean().default(false),
+    max_freeze_days:       z.coerce.number().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.package_category === 'gym_access' || data.package_category === 'bundled') {
+      if (!data.gym_access_days || data.gym_access_days < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Access duration is required',
+          path: ['gym_access_days'],
+        })
+      }
+    }
+    if (data.package_category === 'pt_sessions' || data.package_category === 'bundled') {
+      if (!data.pt_session_credits || data.pt_session_credits < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Number of sessions is required',
+          path: ['pt_session_credits'],
+        })
+      }
+      if (!data.pt_session_expiry_days || data.pt_session_expiry_days < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Session expiry days is required',
+          path: ['pt_session_expiry_days'],
+        })
+      }
+    }
+  })
 
 type FormData = z.infer<typeof schema>
 
@@ -46,40 +78,89 @@ interface PackageFormProps {
   onSuccess: () => void
 }
 
+const CATEGORY_OPTIONS: {
+  value: PackageCategory
+  label: string
+  subtitle: string
+  detail: string
+  icon: React.ReactNode
+  color: string
+}[] = [
+  {
+    value:    'gym_access',
+    label:    'Gym Access',
+    subtitle: 'Entry + check-in',
+    detail:   'Duration-based — grants a set number of access days.',
+    icon:     <Dumbbell className="h-5 w-5" />,
+    color:    'border-blue-500 bg-blue-50 text-blue-800',
+  },
+  {
+    value:    'pt_sessions',
+    label:    'PT Sessions',
+    subtitle: 'Session credits',
+    detail:   'Count + expiry — grants a fixed number of PT sessions.',
+    icon:     <User className="h-5 w-5" />,
+    color:    'border-purple-500 bg-purple-50 text-purple-800',
+  },
+  {
+    value:    'bundled',
+    label:    'Bundled',
+    subtitle: 'Both together',
+    detail:   'Gym access + PT session credits in one package.',
+    icon:     <Layers className="h-5 w-5" />,
+    color:    'border-teal-500 bg-teal-50 text-teal-800',
+  },
+]
+
+function resolveCategory(pkg?: PackageRow): PackageCategory {
+  if (!pkg) return 'gym_access'
+  const cat = (pkg as unknown as { package_category?: string }).package_category
+  if (cat === 'pt_sessions' || cat === 'bundled') return cat
+  return 'gym_access'
+}
+
 export function PackageForm({ package: pkg, onSuccess }: PackageFormProps) {
   const createMutation = useCreatePackage()
   const updateMutation = useUpdatePackage()
   const isPending = createMutation.isPending || updateMutation.isPending
 
+  const pkgAny = pkg as unknown as Record<string, unknown> | undefined
+
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      name: pkg?.name ?? '',
-      type: pkg?.type ?? 'monthly',
-      duration_days: pkg?.duration_days ?? 30,
-      session_credits: pkg?.session_credits ?? undefined,
-      pt_sessions_included: pkg?.pt_sessions_included ?? 0,
-      price: pkg?.price ?? 0,
-      currency: pkg?.currency ?? 'IDR',
-      allow_freeze: pkg?.allow_freeze ?? false,
-      max_freeze_days: pkg?.max_freeze_days ?? undefined,
+      name:                  pkg?.name ?? '',
+      type:                  pkg?.type ?? 'monthly',
+      package_category:      resolveCategory(pkg),
+      gym_access_days:       (pkgAny?.gym_access_days as number | undefined) ?? pkg?.duration_days ?? 30,
+      pt_session_credits:    (pkgAny?.pt_session_credits as number | undefined) ?? undefined,
+      pt_session_expiry_days: (pkgAny?.pt_session_expiry_days as number | undefined) ?? undefined,
+      price:                 pkg?.price ?? 0,
+      currency:              pkg?.currency ?? 'IDR',
+      allow_freeze:          pkg?.allow_freeze ?? false,
+      max_freeze_days:       pkg?.max_freeze_days ?? undefined,
     },
   })
 
-  const watchedType = useWatch({ control: form.control, name: 'type' })
-  const watchedAllowFreeze = useWatch({ control: form.control, name: 'allow_freeze' })
+  const category      = useWatch({ control: form.control, name: 'package_category' })
+  const allowFreeze   = useWatch({ control: form.control, name: 'allow_freeze' })
+
+  const showGymDays  = category === 'gym_access' || category === 'bundled'
+  const showPTFields = category === 'pt_sessions' || category === 'bundled'
 
   async function onSubmit(data: FormData) {
     const payload = {
-      name: data.name,
-      type: data.type,
-      duration_days: data.duration_days,
-      session_credits: data.type === 'sessions' ? data.session_credits : undefined,
-      pt_sessions_included: data.pt_sessions_included ?? 0,
-      price: data.price,
-      currency: data.currency,
-      allow_freeze: data.allow_freeze,
-      max_freeze_days: data.allow_freeze ? data.max_freeze_days : undefined,
+      name:                   data.name,
+      type:                   data.type,
+      package_category:       data.package_category,
+      gym_access_days:        showGymDays ? data.gym_access_days : undefined,
+      pt_session_credits:     showPTFields ? data.pt_session_credits : undefined,
+      pt_session_expiry_days: showPTFields ? data.pt_session_expiry_days : undefined,
+      duration_days:          showGymDays ? data.gym_access_days : undefined,
+      price:                  data.price,
+      currency:               data.currency,
+      allow_freeze:           data.allow_freeze,
+      max_freeze_days:        data.allow_freeze ? data.max_freeze_days : undefined,
     }
 
     if (pkg) {
@@ -97,8 +178,58 @@ export function PackageForm({ package: pkg, onSuccess }: PackageFormProps) {
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Row 1: Name */}
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+
+            {/* Category selector — card-style */}
+            <FormField
+              control={form.control}
+              name="package_category"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Package Category</FormLabel>
+                  <div className="grid grid-cols-3 gap-2 mt-1">
+                    {CATEGORY_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => field.onChange(opt.value)}
+                        className={cn(
+                          'flex flex-col items-center gap-1.5 rounded-lg border-2 p-3 text-center transition-all hover:border-primary',
+                          field.value === opt.value
+                            ? opt.color + ' border-2'
+                            : 'border-border bg-background text-muted-foreground'
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'rounded-full p-1.5',
+                            field.value === opt.value ? 'bg-white/60' : 'bg-muted'
+                          )}
+                        >
+                          {opt.icon}
+                        </span>
+                        <span className="text-xs font-semibold leading-tight">{opt.label}</span>
+                        <span className="text-[10px] leading-tight opacity-75">{opt.subtitle}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Bundled info callout */}
+            {category === 'bundled' && (
+              <div className="flex gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-700">
+                <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  Gym access and PT session expiry dates are calculated independently from the
+                  activation date.
+                </span>
+              </div>
+            )}
+
+            {/* Package Name */}
             <FormField
               control={form.control}
               name="name"
@@ -113,47 +244,99 @@ export function PackageForm({ package: pkg, onSuccess }: PackageFormProps) {
               )}
             />
 
-            {/* Row 2: Type + Duration */}
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Type</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                        <SelectItem value="annual">Annual</SelectItem>
-                        <SelectItem value="sessions">Sessions</SelectItem>
-                        <SelectItem value="day_pass">Day Pass</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="duration_days"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Duration (days)</FormLabel>
+            {/* Type */}
+            <FormField
+              control={form.control}
+              name="type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Billing Type</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <Input type="number" min={1} {...field} />
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="annual">Annual</SelectItem>
+                      <SelectItem value="sessions">Sessions</SelectItem>
+                      <SelectItem value="day_pass">Day Pass</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Gym Access Days (gym_access + bundled) */}
+            {showGymDays && (
+              <FormField
+                control={form.control}
+                name="gym_access_days"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Access Duration (days)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder="e.g. 30"
+                        {...field}
+                        value={field.value ?? ''}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </div>
+            )}
 
-            {/* Row 3: Price + Currency */}
+            {/* PT Session Credits + expiry (pt_sessions + bundled) */}
+            {showPTFields && (
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="pt_session_credits"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Number of Sessions</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="e.g. 10"
+                          {...field}
+                          value={field.value ?? ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="pt_session_expiry_days"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sessions Expire After (days)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="e.g. 90"
+                          {...field}
+                          value={field.value ?? ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {/* Price + Currency */}
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -183,54 +366,6 @@ export function PackageForm({ package: pkg, onSuccess }: PackageFormProps) {
               />
             </div>
 
-            {/* Session Credits (only for sessions type) */}
-            {watchedType === 'sessions' && (
-              <FormField
-                control={form.control}
-                name="session_credits"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Session Credits</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min={1}
-                        placeholder="e.g. 10"
-                        {...field}
-                        value={field.value ?? ''}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {/* PT Sessions Included */}
-            <FormField
-              control={form.control}
-              name="pt_sessions_included"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>PT Sessions Included</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder="0"
-                      {...field}
-                      value={field.value ?? 0}
-                    />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground">
-                    Number of personal trainer sessions bundled in this package (0 = none).
-                    Credits are tracked per active membership.
-                  </p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             {/* Allow Freeze */}
             <FormField
               control={form.control}
@@ -250,8 +385,7 @@ export function PackageForm({ package: pkg, onSuccess }: PackageFormProps) {
               )}
             />
 
-            {/* Max Freeze Days (only when allow_freeze) */}
-            {watchedAllowFreeze && (
+            {allowFreeze && (
               <FormField
                 control={form.control}
                 name="max_freeze_days"

@@ -103,8 +103,18 @@ fitnessplace-saas/
 
 ### Membership
 - `membership_packages` — package templates per brand
+  - `package_category`: `'gym_access'` | `'pt_sessions'` | `'bundled'` — determines access behavior
+  - `gym_access_days` — number of calendar days of gym entry granted
+  - `pt_session_credits` — number of PT sessions included (null for gym_access)
+  - `pt_session_expiry_days` — days before PT credits expire from activation (null for gym_access)
 - `memberships` — active member subscriptions
+  - `gym_access_expires_at` — independent gym entry expiry date
+  - `pt_sessions_expires_at` — independent PT credit expiry date
+  - `gym_access_status`: `'active'` | `'expired'`
+  - `pt_sessions_status`: `'active'` | `'exhausted'` | `'expired'`
 - `membership_freezes` — freeze records
+- `membership_reminders_sent` — dedup log; unique on `(membership_id, reminder_type, reminder_day)`
+  - `reminder_type`: `'gym_expiry'` | `'pt_expiry'` | `'pt_low_sessions'`
 
 ### Payments
 - `invoices` — all payment records (gateway + manual)
@@ -122,12 +132,16 @@ fitnessplace-saas/
 
 ### Access
 - `checkins` — every entry scan event
+  - `staff_override`: `true` = allowed by staff, `false` = denied by staff, `null` = normal check-in
+  - `warning_message` — reason text logged when `staff_override` is non-null
 
 ### Views (Postgres)
 - `v_active_members`
 - `v_daily_revenue`
 - `v_class_attendance_summary`
 - `v_trainer_commission_summary`
+- `v_active_memberships` — active memberships with computed `days_until_gym_expiry`, `days_until_pt_expiry`, `is_gym_expiring_soon`, `is_pt_sessions_low`
+- `v_expiry_report` — full expiry report with member info, joined package details, all computed flags
 
 ---
 
@@ -315,6 +329,7 @@ supabase db reset
 - Do not put business logic inside page components — keep pages thin, logic in server actions and hooks
 - Do not create new shadcn components manually — use `npx shadcn-ui@latest add <component>`
 - Do not use `localStorage` for auth state — Supabase Auth handles this via cookies
+- PT sessions and gym access have **independent expiry dates**. Use `checkMemberAccessStatus()` for all access validation — never check expiry dates directly in components.
 
 ---
 
@@ -328,7 +343,7 @@ Update this section as you build each module.
 | Multi-tenant scaffold | ✅ | ✅ | ✅ | ⬜ |
 | Super-admin panel | ✅ | ✅ | ✅ | ⬜ |
 | Membership management | ✅ | ✅ | ✅ | ⬜ |
-| Membership packages | ✅ | ✅ | ✅ | ⬜ |
+| Membership packages (+ category split) | ✅ | ✅ | ✅ | ⬜ |
 | Personal trainer mgmt | ✅ | ✅ | ✅ | ⬜ |
 | Fitness class mgmt | ✅ | ✅ | ✅ | ⬜ |
 | Check-in & access | ✅ | ✅ | ✅ | ⬜ |
