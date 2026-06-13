@@ -7,11 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { StatusBadge } from '@/components/shared/status-badge'
-import { MembershipCard } from '@/components/members/membership-card'
-import { AssignPackageDialog } from '@/components/members/assign-package-dialog'
+import { MembershipsSection } from '@/components/members/memberships-section'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { ArrowLeft, Pencil, Phone, Calendar, Shield, User } from 'lucide-react'
-import type { MembershipWithPackage } from '@/lib/actions/members'
 import { ResetPasswordDialog } from '@/components/members/reset-password-dialog'
 
 interface PageProps {
@@ -115,24 +113,24 @@ export default async function MemberDetailPage({ params }: PageProps) {
 
             {/* Membership Tab */}
             <TabsContent value="membership">
-              <div className="space-y-4">
-                <div className="flex justify-end">
-                  <AssignPackageDialog memberId={params.id} />
-                </div>
-                {member.memberships.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                    No memberships yet. Assign a package to get started.
-                  </div>
-                ) : (
-                  member.memberships.map((m) => (
-                    <MembershipCard
-                      key={m.id}
-                      membership={m as MembershipWithPackage & { membership_packages: { name: string; type: string; allow_freeze: boolean } | null }}
-                      onRefresh={() => {}}
-                    />
-                  ))
-                )}
-              </div>
+              <MembershipsSection
+                memberId={params.id}
+                memberships={member.memberships.map((m) => ({
+                  id: m.id,
+                  status: m.status,
+                  starts_at: m.starts_at,
+                  expires_at: m.expires_at ?? null,
+                  sessions_remaining: m.sessions_remaining ?? null,
+                  auto_renew: m.auto_renew,
+                  membership_packages: m.membership_packages
+                    ? {
+                        name: (m.membership_packages as { name: string; type: string; allow_freeze: boolean }).name,
+                        type: (m.membership_packages as { name: string; type: string; allow_freeze: boolean }).type,
+                        allow_freeze: (m.membership_packages as { name: string; type: string; allow_freeze: boolean }).allow_freeze,
+                      }
+                    : null,
+                }))}
+              />
             </TabsContent>
 
             {/* Check-ins Tab */}
