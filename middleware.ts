@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
@@ -61,10 +62,19 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  // 5. Resolve brand_id from subdomain (one cheap indexed lookup)
+  // 5. Resolve brand_id from subdomain using service role to bypass RLS.
+  //    The brands_select RLS policy uses get_my_brand_id() which reads the
+  //    x-brand-id header — a circular dependency: we need the brand to set
+  //    the header, but need the header to read the brand.  Service role
+  //    bypasses RLS entirely and is safe here (server-side only).
   let brandId: string | null = null
   if (subdomain) {
-    const { data: brand } = await supabase
+    const serviceClient = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+    const { data: brand } = await serviceClient
       .from('brands')
       .select('id')
       .eq('slug', subdomain)
@@ -73,9 +83,9 @@ export async function middleware(request: NextRequest) {
 
     if (brand?.id) {
       brandId = brand.id
-      // Set header for server components/actions and the Supabase client factory
+      // Set header for response (browser DevTools visibility)
       response.headers.set('x-brand-id', brand.id)
-      // Set cookie so client-side hooks can read brand_id without an extra query
+      // Set cookie so both server components (cookies()) and browser JS can read it
       response.cookies.set('__fp_brand_id', brand.id, {
         path:     '/',
         sameSite: 'lax',
