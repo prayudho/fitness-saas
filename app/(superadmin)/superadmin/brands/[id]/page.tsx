@@ -15,11 +15,12 @@ import {
   UserPlus,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useBrandDetail, useSuspendBrand, useActivateBrand } from '@/lib/hooks/use-superadmin'
-import { getTeamMembers, inviteTeamMember } from '@/lib/actions/team.actions'
+import { useTeamMembers } from '@/lib/hooks/use-team'
+import { inviteTeamMember } from '@/lib/actions/team.actions'
 import type { TeamMember } from '@/lib/actions/team.actions'
 import { inviteTeamMemberSchema, type InviteTeamMemberInput } from '@/lib/validations/team'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
@@ -112,7 +113,7 @@ function InviteTeamMemberSheet({
       return result
     },
     onSuccess: async () => {
-      await qc.refetchQueries({ queryKey: ['team-members', brandId] })
+      await qc.invalidateQueries({ queryKey: ['team', 'list', brandId] })
       toast.success('Team member invited successfully!')
       form.reset({ brandId, fullName: '', email: '', phone: '', role: 'staff', tempPassword: '' })
       onOpenChange(false)
@@ -258,15 +259,7 @@ function InviteTeamMemberSheet({
 function BrandTeamSection({ brandId }: { brandId: string }) {
   const [sheetOpen, setSheetOpen] = React.useState(false)
 
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['team-members', brandId],
-    queryFn: async () => {
-      const result = await getTeamMembers(brandId)
-      if (result.error) throw new Error(result.error)
-      return result
-    },
-    enabled: Boolean(brandId),
-  })
+  const { data, isLoading, isError, error } = useTeamMembers(brandId)
 
   const members: TeamMember[] = data?.data ?? []
 
