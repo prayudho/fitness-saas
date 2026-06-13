@@ -294,13 +294,27 @@ export async function assignPackage(input: {
 
     if (pkgError || !pkg) return { error: pkgError?.message ?? 'Package not found' }
 
-    // Calculate expires_at
-    let expiresAt: string | null = null
-    if (pkg.duration_days) {
-      const start = new Date(input.starts_at)
-      start.setDate(start.getDate() + pkg.duration_days)
-      expiresAt = start.toISOString()
-    }
+    // Calculate expiry dates per package category
+    const category = (pkg.package_category as string) ?? 'gym_access'
+    const startMs = new Date(input.starts_at).getTime()
+
+    const gymDays = pkg.gym_access_days ?? pkg.duration_days ?? 0
+    const gymAccessExpiresAt =
+      category === 'pt_sessions' ? null
+        : gymDays > 0 ? new Date(startMs + gymDays * 86400000).toISOString()
+        : null
+
+    const ptDays = pkg.pt_session_expiry_days
+    const ptSessionsExpiresAt =
+      category === 'gym_access' ? null
+        : ptDays && ptDays > 0 ? new Date(startMs + ptDays * 86400000).toISOString()
+        : null
+
+    const ptSessionsRemaining =
+      category === 'gym_access' ? null : (pkg.pt_session_credits ?? null)
+
+    const expiresAt =
+      category === 'pt_sessions' ? ptSessionsExpiresAt : gymAccessExpiresAt
 
     // Handle promo code
     let finalAmount = pkg.price
@@ -342,14 +356,20 @@ export async function assignPackage(input: {
     const { data: membership, error: membershipError } = await supabase
       .from('memberships')
       .insert({
-        brand_id: profile.brand_id,
-        member_id: input.member_id,
-        package_id: input.package_id,
-        status: 'active',
-        starts_at: input.starts_at,
-        expires_at: expiresAt,
-        sessions_remaining: pkg.session_credits ?? null,
-        auto_renew: false,
+        brand_id:              profile.brand_id,
+        member_id:             input.member_id,
+        package_id:            input.package_id,
+        status:                'active',
+        starts_at:             input.starts_at,
+        expires_at:            expiresAt,
+        sessions_remaining:    pkg.session_credits ?? ptSessionsRemaining,
+        auto_renew:            false,
+        package_category:      category,
+        gym_access_expires_at: gymAccessExpiresAt,
+        pt_sessions_expires_at: ptSessionsExpiresAt,
+        pt_sessions_remaining: ptSessionsRemaining,
+        gym_access_status:     'active',
+        pt_sessions_status:    'active',
       })
       .select()
       .single()
