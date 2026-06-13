@@ -4,17 +4,17 @@ import { cookies, headers } from 'next/headers'
 import type { Database } from '@/types/database'
 
 export function createClient() {
-  const cookieStore  = cookies()
-  const subdomain    = headers().get('x-tenant-subdomain')
+  const cookieStore = cookies()
+  const brandId     = headers().get('x-brand-id')
 
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      // Forward the subdomain header so PostgREST exposes it as
-      // current_setting('request.headers') inside SQL functions (e.g. get_my_brand_id).
-      global: subdomain
-        ? { headers: { 'x-tenant-subdomain': subdomain } }
+      // Forward brand UUID so PostgREST can call get_my_brand_id() inside
+      // RLS policies.  Matches the header the browser client also sends.
+      global: brandId
+        ? { headers: { 'x-brand-id': brandId } }
         : undefined,
       cookies: {
         getAll() {
