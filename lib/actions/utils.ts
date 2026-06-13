@@ -1,5 +1,3 @@
-'use server'
-
 import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
