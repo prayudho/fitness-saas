@@ -142,7 +142,7 @@ export async function getDashboardStats(): Promise<{ data?: DashboardStats; erro
       },
     }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -183,7 +183,7 @@ export async function getRevenueByMonth(
 
     return { data: result }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -223,7 +223,7 @@ export async function getPackageBreakdown(): Promise<{ data?: PackageBreakdownIt
 
     return { data: result }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -261,7 +261,7 @@ export async function getPaymentMethodBreakdown(): Promise<{ data?: PaymentMetho
 
     return { data: result }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -324,7 +324,7 @@ export async function getMemberGrowth(
 
     return { data: result }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -349,7 +349,7 @@ export async function getClassPerformance(): Promise<{ data?: ClassPerformanceIt
         id,
         capacity,
         class_types(name),
-        instructor:profiles!classes_instructor_id_fkey(full_name),
+        instructor:profiles!classes_instructor_brand_fkey(full_name),
         class_bookings(id, status)
       `)
       .eq('brand_id', profile.brand_id)
@@ -382,7 +382,7 @@ export async function getClassPerformance(): Promise<{ data?: ClassPerformanceIt
     items.sort((a, b) => b.fill_rate - a.fill_rate)
     return { data: items.slice(0, 10) }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -445,7 +445,7 @@ export async function getTrainerPerformance(): Promise<{ data?: TrainerPerforman
     const result = Object.values(byTrainer).sort((a, b) => b.session_count - a.session_count)
     return { data: result }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -468,7 +468,7 @@ export async function getRecentCheckins(limit = 5): Promise<{
         id,
         method,
         checked_in_at,
-        member:profiles!checkins_member_id_fkey(full_name)
+        member:profiles!checkins_member_brand_fkey(full_name)
       `)
       .eq('brand_id', profile.brand_id)
       .order('checked_in_at', { ascending: false })
@@ -486,6 +486,6 @@ export async function getRecentCheckins(limit = 5): Promise<{
 
     return { data: result }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }

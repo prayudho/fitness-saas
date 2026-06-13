@@ -55,7 +55,7 @@ export async function getInvoices(filters?: {
 
     return { data: (data ?? []) as InvoiceWithDetails[], count: count ?? 0 }
   } catch (e) {
-    return { data: [], count: 0, error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], count: 0, error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -78,7 +78,7 @@ export async function getInvoice(id: string): Promise<{ data?: InvoiceWithDetail
 
     return { data: data as InvoiceWithDetails }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -113,7 +113,7 @@ export async function createInvoice(input: {
     revalidatePath('/admin/billing')
     return { data: data ?? undefined }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -143,7 +143,7 @@ export async function recordPayment(
     revalidatePath('/member/billing')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -199,7 +199,7 @@ export async function getMidtransSnapToken(
 
     return { data: { snap_token: result.token, redirect_url: result.redirect_url } }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -236,7 +236,7 @@ export async function processRefund(
     revalidatePath('/admin/billing')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -279,7 +279,7 @@ export async function getRevenueSummary(): Promise<{
 
     return { data: result }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -303,6 +303,6 @@ export async function getMemberInvoices(): Promise<{
 
     return { data: (data ?? []) as InvoiceWithDetails[] }
   } catch (e) {
-    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }

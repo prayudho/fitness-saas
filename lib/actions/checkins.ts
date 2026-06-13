@@ -181,7 +181,7 @@ export async function processCheckin(input: {
     return {
       success: false,
       status: 'denied',
-      message: e instanceof Error ? e.message : 'An error occurred',
+      message: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred',
       member: { full_name: null, avatar_url: null },
     }
   }
@@ -218,7 +218,7 @@ export async function recordCheckinWithOverride(input: {
     revalidatePath('/staff/checkin')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -243,7 +243,7 @@ export async function searchMemberForCheckin(
 
     return { data: (data ?? []) as MemberSearchResult[] }
   } catch (e) {
-    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -257,7 +257,7 @@ export async function getCheckinLog(
 
     const { data, error } = await supabase
       .from('checkins')
-      .select('*, profiles!member_id(full_name, avatar_url)')
+      .select('*, profiles!checkins_member_brand_fkey(full_name, avatar_url)')
       .eq('brand_id', profile.brand_id)
       .order('checked_in_at', { ascending: false })
       .limit(limit)
@@ -266,7 +266,7 @@ export async function getCheckinLog(
 
     return { data: (data ?? []) as CheckinWithProfile[] }
   } catch (e) {
-    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -289,7 +289,7 @@ export async function getOccupancyCount(): Promise<{ count: number; error?: stri
 
     return { count: count ?? 0 }
   } catch (e) {
-    return { count: 0, error: e instanceof Error ? e.message : 'An error occurred' }
+    return { count: 0, error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -371,6 +371,6 @@ export async function createWalkinPass(
 
     return { data: { membership, invoice } }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }

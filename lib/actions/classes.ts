@@ -67,7 +67,7 @@ export async function getClassTypes(): Promise<{ data: ClassTypeRow[]; error?: s
     if (error) return { data: [], error: error.message }
     return { data: data ?? [] }
   } catch (e) {
-    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -94,7 +94,7 @@ export async function createClassType(
     revalidatePath('/admin/classes')
     return { data: data ?? undefined }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -123,7 +123,7 @@ export async function updateClassType(
     revalidatePath('/admin/classes')
     return { data: data ?? undefined }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -155,7 +155,7 @@ export async function deleteClassType(id: string): Promise<{ error?: string }> {
     revalidatePath('/admin/classes')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -193,7 +193,7 @@ export async function getClasses(filters?: {
       .select(`
         *,
         class_types!class_type_id(id, name, color, icon),
-        instructor_profile:profiles!instructor_id(id, full_name, avatar_url),
+        instructor_profile:profiles!classes_instructor_brand_fkey(id, full_name, avatar_url),
         class_bookings(id, status)
       `)
       .eq('brand_id', profile.brand_id)
@@ -235,7 +235,7 @@ export async function getClasses(filters?: {
 
     return { data: result }
   } catch (e) {
-    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -250,11 +250,8 @@ export async function getClass(id: string): Promise<{ data?: ClassDetail; error?
       .select(`
         *,
         class_types!class_type_id(id, name, color, icon),
-        instructor_profile:profiles!instructor_id(id, full_name, avatar_url),
-        class_bookings(
-          *,
-          member_profile:profiles!member_id(id, full_name, avatar_url, phone)
-        )
+        instructor_profile:profiles!classes_instructor_brand_fkey(id, full_name, avatar_url),
+        class_bookings(*)
       `)
       .eq('id', id)
       .eq('brand_id', profile.brand_id)
@@ -262,6 +259,19 @@ export async function getClass(id: string): Promise<{ data?: ClassDetail; error?
 
     if (error) return { error: error.message }
     if (!data) return { error: 'Class not found' }
+
+    // class_bookings has no brand_id column — fetch member profiles separately
+    const rawBookings = (data.class_bookings ?? []) as ClassBookingRow[]
+    const memberIds = [...new Set(rawBookings.map((b) => b.member_id))]
+    const profileMap: Record<string, Pick<Row<'profiles'>, 'id' | 'full_name' | 'avatar_url' | 'phone'>> = {}
+    if (memberIds.length > 0) {
+      const { data: memberProfiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, phone')
+        .eq('brand_id', profile.brand_id)
+        .in('id', memberIds)
+      for (const p of memberProfiles ?? []) profileMap[p.id] = p as typeof profileMap[string]
+    }
 
     const result: ClassDetail = {
       id: data.id,
@@ -277,12 +287,15 @@ export async function getClass(id: string): Promise<{ data?: ClassDetail; error?
       updated_at: data.updated_at,
       class_types: data.class_types as ClassDetail['class_types'],
       instructor_profile: data.instructor_profile as ClassDetail['instructor_profile'],
-      class_bookings: (data.class_bookings ?? []) as ClassBookingWithMember[],
+      class_bookings: rawBookings.map((b) => ({
+        ...b,
+        member_profile: profileMap[b.member_id] ?? null,
+      })) as ClassBookingWithMember[],
     }
 
     return { data: result }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -313,7 +326,7 @@ export async function createClass(
     revalidatePath('/admin/classes')
     return { data: data ?? undefined }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -345,7 +358,7 @@ export async function updateClass(
     revalidatePath('/admin/classes')
     return { data: data ?? undefined }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -366,7 +379,7 @@ export async function cancelClass(id: string): Promise<{ error?: string }> {
     revalidatePath('/member/classes')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -430,7 +443,7 @@ export async function bookClass(
     revalidatePath('/member/classes')
     return { data: { bookingId: booking.id, status: bookingStatus } }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -480,7 +493,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
     revalidatePath('/member/classes')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -507,7 +520,7 @@ export async function getMemberBookings(): Promise<{
     if (error) return { data: [], error: error.message }
     return { data: (data ?? []) as MemberBookingWithClass[] }
   } catch (e) {
-    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -520,19 +533,34 @@ export async function getClassAttendees(classId: string): Promise<{
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: [], error: 'No brand context' }
 
-    const { data, error } = await supabase
+    const { data: bookingsData, error } = await supabase
       .from('class_bookings')
-      .select(`
-        *,
-        member_profile:profiles!member_id(id, full_name, avatar_url, phone)
-      `)
+      .select('*')
       .eq('class_id', classId)
       .order('booked_at')
 
     if (error) return { data: [], error: error.message }
-    return { data: (data ?? []) as ClassBookingWithMember[] }
+
+    const rawBookings = (bookingsData ?? []) as ClassBookingRow[]
+    const memberIds = [...new Set(rawBookings.map((b) => b.member_id))]
+    const profileMap: Record<string, Pick<Row<'profiles'>, 'id' | 'full_name' | 'avatar_url' | 'phone'>> = {}
+    if (memberIds.length > 0) {
+      const { data: memberProfiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, phone')
+        .eq('brand_id', profile.brand_id)
+        .in('id', memberIds)
+      for (const p of memberProfiles ?? []) profileMap[p.id] = p as typeof profileMap[string]
+    }
+
+    return {
+      data: rawBookings.map((b) => ({
+        ...b,
+        member_profile: profileMap[b.member_id] ?? null,
+      })) as ClassBookingWithMember[],
+    }
   } catch (e) {
-    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -555,6 +583,6 @@ export async function checkInAttendee(bookingId: string): Promise<{ error?: stri
     revalidatePath('/staff/checkin')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }

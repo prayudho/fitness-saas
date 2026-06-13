@@ -46,7 +46,7 @@ export async function getTrainers(): Promise<{ data: TrainerWithProfile[]; error
       .from('trainers')
       .select(`
         *,
-        profiles!trainers_id_fkey (id, full_name, avatar_url, phone)
+        profiles!trainers_id_brand_fkey (id, full_name, avatar_url, phone)
       `)
       .eq('brand_id', profile.brand_id)
       .order('created_at', { ascending: false })
@@ -71,7 +71,7 @@ export async function getTrainers(): Promise<{ data: TrainerWithProfile[]; error
 
     return { data: result }
   } catch (e) {
-    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -88,7 +88,7 @@ export async function getTrainer(id: string): Promise<{ data: TrainerDetail | nu
       .from('trainers')
       .select(`
         *,
-        profiles!trainers_id_fkey (*)
+        profiles!trainers_id_brand_fkey (*)
       `)
       .eq('id', id)
       .eq('brand_id', profile.brand_id)
@@ -107,7 +107,7 @@ export async function getTrainer(id: string): Promise<{ data: TrainerDetail | nu
       .from('trainer_sessions')
       .select(`
         *,
-        member:profiles!trainer_sessions_member_id_fkey (id, full_name, avatar_url)
+        member:profiles!trainer_sessions_member_brand_fkey (id, full_name, avatar_url)
       `)
       .eq('trainer_id', id)
       .eq('brand_id', profile.brand_id)
@@ -122,7 +122,7 @@ export async function getTrainer(id: string): Promise<{ data: TrainerDetail | nu
       },
     }
   } catch (e) {
-    return { data: null, error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: null, error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -181,7 +181,7 @@ export async function createTrainer(input: {
     revalidatePath('/admin/trainers')
     return { data: trainer }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -223,7 +223,7 @@ export async function updateTrainer(
     revalidatePath(`/admin/trainers/${id}`)
     return { data }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -262,7 +262,7 @@ export async function setTrainerAvailability(
     revalidatePath(`/admin/trainers/${trainerId}`)
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -284,7 +284,7 @@ export async function getTrainerAvailability(
     if (error) throw error
     return { data: data ?? [] }
   } catch (e) {
-    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -342,7 +342,7 @@ export async function createSession(input: {
     revalidatePath('/member/pt-booking')
     return { data: session }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -393,7 +393,7 @@ export async function updateSessionStatus(
     revalidatePath('/member/pt-booking')
     return { data }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -410,7 +410,7 @@ export async function getTrainerSessions(
       .from('trainer_sessions')
       .select(`
         *,
-        member:profiles!trainer_sessions_member_id_fkey (id, full_name, avatar_url)
+        member:profiles!trainer_sessions_member_brand_fkey (id, full_name, avatar_url)
       `)
       .eq('trainer_id', trainerId)
       .eq('brand_id', profile.brand_id)
@@ -431,7 +431,7 @@ export async function getTrainerSessions(
     if (error) throw error
     return { data: (data ?? []) as TrainerSessionWithMember[] }
   } catch (e) {
-    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -449,7 +449,7 @@ export async function getMemberPTBookings(
         *,
         trainer:trainers!trainer_sessions_trainer_id_fkey (
           *,
-          profiles!trainers_id_fkey (id, full_name, avatar_url)
+          profiles!trainers_id_brand_fkey (id, full_name, avatar_url)
         )
       `)
       .eq('member_id', memberId)
@@ -459,6 +459,6 @@ export async function getMemberPTBookings(
     if (error) throw error
     return { data: (data ?? []) as TrainerSessionWithTrainer[] }
   } catch (e) {
-    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }

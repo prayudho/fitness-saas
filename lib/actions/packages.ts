@@ -57,7 +57,7 @@ export async function getPackages(): Promise<{ data?: PackageRow[]; error?: stri
     if (error) throw error
     return { data: data ?? [] }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -87,7 +87,7 @@ export async function getPackage(
 
     return { data: { ...pkg, active_memberships_count: count ?? 0 } }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -126,7 +126,7 @@ export async function createPackage(
     revalidatePath('/admin/packages')
     return { data }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -170,7 +170,7 @@ export async function updatePackage(
     revalidatePath(`/admin/packages/${id}/edit`)
     return { data }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -201,7 +201,7 @@ export async function deletePackage(id: string): Promise<{ error?: string }> {
     revalidatePath('/admin/packages')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -223,7 +223,7 @@ export async function togglePackageActive(
     revalidatePath('/admin/packages')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -243,7 +243,7 @@ export async function getPromoCodes(): Promise<{ data?: PromoCodeRow[]; error?: 
     if (error) throw error
     return { data: data ?? [] }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -272,7 +272,7 @@ export async function createPromoCode(
     revalidatePath('/admin/packages')
     return { data }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -304,7 +304,7 @@ export async function updatePromoCode(
     revalidatePath('/admin/packages')
     return { data }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -323,6 +323,6 @@ export async function deletePromoCode(id: string): Promise<{ error?: string }> {
     revalidatePath('/admin/packages')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }

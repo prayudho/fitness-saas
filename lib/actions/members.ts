@@ -83,7 +83,7 @@ export async function getMembers(filters?: {
 
     return { data: result, count: count ?? 0 }
   } catch (e) {
-    return { data: [], count: 0, error: e instanceof Error ? e.message : 'An error occurred' }
+    return { data: [], count: 0, error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -122,7 +122,7 @@ export async function getMember(id: string): Promise<{ data?: MemberDetail; erro
         .limit(20),
       supabase
         .from('trainer_sessions')
-        .select('*, trainer:trainers!trainer_id(id, profiles!id(id, full_name, avatar_url))')
+        .select('*, trainer:trainers!trainer_id(id, profiles!trainers_id_brand_fkey(id, full_name, avatar_url))')
         .eq('member_id', id)
         .order('scheduled_at', { ascending: false })
         .limit(20),
@@ -138,7 +138,7 @@ export async function getMember(id: string): Promise<{ data?: MemberDetail; erro
 
     return { data: memberDetail }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -185,7 +185,7 @@ export async function updateMember(
     revalidatePath(`/admin/members/${id}`)
     return { data: data ?? undefined }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -218,7 +218,7 @@ export async function freezeMembership(
     revalidatePath('/admin/members')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -246,7 +246,7 @@ export async function unfreezeMembership(membershipId: string): Promise<{ error?
     revalidatePath('/admin/members')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -266,7 +266,7 @@ export async function cancelMembership(membershipId: string): Promise<{ error?: 
     revalidatePath('/admin/members')
     return {}
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }
 
@@ -394,6 +394,6 @@ export async function assignPackage(input: {
 
     return { data: { membership, invoice } }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }
 }

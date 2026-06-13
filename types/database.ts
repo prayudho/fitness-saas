@@ -108,6 +108,34 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "checkins_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "checkins_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_members"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "checkins_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_memberships"
+            referencedColumns: ["member_id", "brand_id"]
+          },
+          {
+            foreignKeyName: "checkins_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_expiry_report"
+            referencedColumns: ["member_id", "brand_id"]
+          },
+          {
             foreignKeyName: "checkins_membership_id_fkey"
             columns: ["membership_id"]
             isOneToOne: false
@@ -272,6 +300,34 @@ export type Database = {
             referencedRelation: "class_types"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "classes_instructor_brand_fkey"
+            columns: ["instructor_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "classes_instructor_brand_fkey"
+            columns: ["instructor_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_members"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "classes_instructor_brand_fkey"
+            columns: ["instructor_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_memberships"
+            referencedColumns: ["member_id", "brand_id"]
+          },
+          {
+            foreignKeyName: "classes_instructor_brand_fkey"
+            columns: ["instructor_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_expiry_report"
+            referencedColumns: ["member_id", "brand_id"]
+          },
         ]
       }
       custom_roles: {
@@ -359,6 +415,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "brands"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "invoices_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_members"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "invoices_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_memberships"
+            referencedColumns: ["member_id", "brand_id"]
+          },
+          {
+            foreignKeyName: "invoices_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_expiry_report"
+            referencedColumns: ["member_id", "brand_id"]
           },
           {
             foreignKeyName: "invoices_membership_id_fkey"
@@ -693,6 +777,34 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "memberships_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "memberships_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_members"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "memberships_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_memberships"
+            referencedColumns: ["member_id", "brand_id"]
+          },
+          {
+            foreignKeyName: "memberships_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_expiry_report"
+            referencedColumns: ["member_id", "brand_id"]
+          },
+          {
             foreignKeyName: "memberships_package_id_fkey"
             columns: ["package_id"]
             isOneToOne: false
@@ -976,6 +1088,34 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "trainer_sessions_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "trainer_sessions_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_members"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "trainer_sessions_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_memberships"
+            referencedColumns: ["member_id", "brand_id"]
+          },
+          {
+            foreignKeyName: "trainer_sessions_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_expiry_report"
+            referencedColumns: ["member_id", "brand_id"]
+          },
+          {
             foreignKeyName: "trainer_sessions_membership_id_fkey"
             columns: ["membership_id"]
             isOneToOne: false
@@ -1056,6 +1196,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "brands"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trainers_id_brand_fkey"
+            columns: ["id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "trainers_id_brand_fkey"
+            columns: ["id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_members"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "trainers_id_brand_fkey"
+            columns: ["id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_memberships"
+            referencedColumns: ["member_id", "brand_id"]
+          },
+          {
+            foreignKeyName: "trainers_id_brand_fkey"
+            columns: ["id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "v_expiry_report"
+            referencedColumns: ["member_id", "brand_id"]
           },
         ]
       }
