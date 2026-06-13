@@ -1,9 +1,9 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import {
+  getClasses,
   getClassTypes,
   getClass,
   createClass,
@@ -93,68 +93,12 @@ export function useDeleteClassType() {
 // ─────────────────────────────────────────────
 
 export function useClasses(filters?: { weekStart?: string; classTypeId?: string }) {
-  const supabase = createClient()
-
   return useQuery({
     queryKey: ['classes', filters],
     queryFn: async (): Promise<ClassWithDetails[]> => {
-      // Calculate week range
-      let weekStartDate: Date
-      if (filters?.weekStart) {
-        weekStartDate = new Date(filters.weekStart)
-      } else {
-        weekStartDate = new Date()
-        const day = weekStartDate.getDay()
-        const diff = day === 0 ? -6 : 1 - day
-        weekStartDate.setDate(weekStartDate.getDate() + diff)
-        weekStartDate.setHours(0, 0, 0, 0)
-      }
-
-      const weekEndDate = new Date(weekStartDate)
-      weekEndDate.setDate(weekEndDate.getDate() + 7)
-
-      let query = supabase
-        .from('classes')
-        .select(`
-          *,
-          class_types!class_type_id(id, name, color, icon),
-          instructor_profile:profiles!instructor_id(id, full_name, avatar_url),
-          class_bookings(id, status)
-        `)
-        .gte('scheduled_at', weekStartDate.toISOString())
-        .lt('scheduled_at', weekEndDate.toISOString())
-        .order('scheduled_at')
-
-      if (filters?.classTypeId) {
-        query = query.eq('class_type_id', filters.classTypeId)
-      }
-
-      const { data, error } = await query
-      if (error) throw new Error(error.message)
-
-      return (data ?? []).map((cls) => {
-        const bookings = (cls.class_bookings ?? []) as { id: string; status: string }[]
-        const bookedCount = bookings.filter(
-          (b) => b.status === 'booked' || b.status === 'attended'
-        ).length
-
-        return {
-          id: cls.id,
-          brand_id: cls.brand_id,
-          class_type_id: cls.class_type_id,
-          instructor_id: cls.instructor_id,
-          room: cls.room,
-          capacity: cls.capacity,
-          duration_minutes: cls.duration_minutes,
-          scheduled_at: cls.scheduled_at,
-          status: cls.status,
-          created_at: cls.created_at,
-          updated_at: cls.updated_at,
-          class_types: cls.class_types as ClassWithDetails['class_types'],
-          instructor_profile: cls.instructor_profile as ClassWithDetails['instructor_profile'],
-          booked_count: bookedCount,
-        }
-      })
+      const result = await getClasses(filters)
+      if (result.error) throw new Error(result.error)
+      return result.data
     },
   })
 }
