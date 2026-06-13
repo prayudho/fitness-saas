@@ -50,6 +50,14 @@ interface BookingWithClass extends ClassBookingRow {
   classes: ClassWithType | null
 }
 
+interface AssignedTrainer {
+  assignment_id: string
+  trainer_id: string
+  trainer_name: string
+  trainer_avatar_url: string | null
+  status: string
+}
+
 interface DashboardData {
   profile: ProfileRow
   activeMemberships: MembershipWithPackage[]
@@ -58,6 +66,7 @@ interface DashboardData {
   recentCheckins: CheckinRow[]
   classesThisMonth: number
   checkinsThisMonth: number
+  assignedTrainer: AssignedTrainer | null
 }
 
 async function fetchDashboardData(): Promise<DashboardData> {
@@ -124,9 +133,44 @@ async function fetchDashboardData(): Promise<DashboardData> {
   const profileData = (profileResult as any).data as ProfileRow | null
   if (profileResult.error || !profileData) throw new Error('Profile not found')
 
+  const activeMemberships = (membershipsResult.data ?? []) as unknown as MembershipWithPackage[]
+
+  // Fetch PT assignment for first active PT/bundled membership
+  let assignedTrainer: AssignedTrainer | null = null
+  const ptMem = activeMemberships.find((m) => {
+    const cat = ((m as unknown as Record<string, unknown>).package_category as string | undefined) ?? ''
+    return cat === 'pt_sessions' || cat === 'bundled'
+  })
+
+  if (ptMem) {
+    const { data: assignment } = await supabase
+      .from('pt_assignments')
+      .select(`
+        id,
+        trainer_id,
+        status,
+        trainer_profile:profiles!pt_assignments_trainer_id_fkey (full_name, avatar_url)
+      `)
+      .eq('member_id', user.id)
+      .eq('membership_id', ptMem.id)
+      .in('status', ['active', 'grace_period'])
+      .maybeSingle()
+
+    if (assignment) {
+      const tp = (assignment as unknown as { trainer_profile: { full_name: string; avatar_url: string | null } | null }).trainer_profile
+      assignedTrainer = {
+        assignment_id: assignment.id,
+        trainer_id:    assignment.trainer_id,
+        trainer_name:  tp?.full_name ?? 'Unknown',
+        trainer_avatar_url: tp?.avatar_url ?? null,
+        status: assignment.status,
+      }
+    }
+  }
+
   return {
     profile: profileData,
-    activeMemberships: ((membershipsResult.data ?? []) as unknown as MembershipWithPackage[]),
+    activeMemberships,
     upcomingBookings: ((bookingsResult.data ?? []) as unknown as BookingWithClass[]).filter(
       (b) => b.classes && new Date(b.classes.scheduled_at) >= now
     ),
@@ -134,6 +178,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     recentCheckins: (checkinsResult.data ?? []) as CheckinRow[],
     classesThisMonth: monthBookingsResult.count ?? 0,
     checkinsThisMonth: monthCheckinsResult.count ?? 0,
+    assignedTrainer,
   }
 }
 
@@ -254,7 +299,10 @@ function GymAccessCard({ membership }: { membership: MembershipWithPackage }) {
 
 // ── PT Sessions Card ─────────────────────────────────────────────────────────
 
-function PTSessionsCard({ membership }: { membership: MembershipWithPackage }) {
+function PTSessionsCard({ membership, assignedTrainer }: {
+  membership: MembershipWithPackage
+  assignedTrainer?: AssignedTrainer | null
+}) {
   const m = membership as unknown as Record<string, unknown>
   const ptExpiresAt = m.pt_sessions_expires_at as string | null
   const ptRemaining = m.pt_sessions_remaining as number | null
@@ -334,6 +382,29 @@ function PTSessionsCard({ membership }: { membership: MembershipWithPackage }) {
             {daysUntilPT > 0 ? ` · ${daysUntilPT} days left` : ' · Expired'}
           </p>
         )}
+
+        {/* My Personal Trainer */}
+        <div className="mt-3 pt-3 border-t">
+          <p className="text-xs font-medium text-muted-foreground mb-2">My Personal Trainer</p>
+          {assignedTrainer ? (
+            <div className="flex items-center gap-2.5">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={assignedTrainer.trainer_avatar_url ?? undefined} />
+                <AvatarFallback className="text-xs bg-purple-100 text-purple-700">
+                  {assignedTrainer.trainer_name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{assignedTrainer.trainer_name}</p>
+                {assignedTrainer.status === 'grace_period' && (
+                  <p className="text-xs text-amber-600">Grace period</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">No trainer assigned yet.</p>
+          )}
+        </div>
       </CardContent>
     </Card>
   )
@@ -341,7 +412,7 @@ function PTSessionsCard({ membership }: { membership: MembershipWithPackage }) {
 
 // ── Membership section ────────────────────────────────────────────────────────
 
-function MembershipsSection({ memberships }: { memberships: MembershipWithPackage[] }) {
+function MembershipsSection({ memberships, assignedTrainer }: { memberships: MembershipWithPackage[]; assignedTrainer?: AssignedTrainer | null }) {
   if (memberships.length === 0) {
     return (
       <Card>
@@ -367,7 +438,7 @@ function MembershipsSection({ memberships }: { memberships: MembershipWithPackag
       cards.push(<GymAccessCard key={`gym-${m.id}`} membership={m} />)
     }
     if (category === 'pt_sessions' || category === 'bundled') {
-      cards.push(<PTSessionsCard key={`pt-${m.id}`} membership={m} />)
+      cards.push(<PTSessionsCard key={`pt-${m.id}`} membership={m} assignedTrainer={assignedTrainer} />)
     }
     // Fallback for pre-migration memberships (no category set)
     if (category !== 'gym_access' && category !== 'pt_sessions' && category !== 'bundled') {
@@ -426,6 +497,7 @@ export default function MemberDashboardPage() {
     recentCheckins,
     classesThisMonth,
     checkinsThisMonth,
+    assignedTrainer,
   } = data
 
   const firstName = profile.full_name.split(' ')[0]
@@ -461,7 +533,7 @@ export default function MemberDashboardPage() {
       {/* Memberships Section */}
       <div>
         <p className="text-sm font-medium text-muted-foreground mb-3">Your Memberships</p>
-        <MembershipsSection memberships={activeMemberships} />
+        <MembershipsSection memberships={activeMemberships} assignedTrainer={assignedTrainer} />
       </div>
 
       {/* Stats Row */}

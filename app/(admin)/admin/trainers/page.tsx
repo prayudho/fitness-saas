@@ -100,6 +100,31 @@ const columns: ColumnDef<TrainerWithProfile>[] = [
     ),
   },
   {
+    accessorKey: 'active_members_count',
+    header: 'Active Members',
+    cell: ({ getValue }) => {
+      const v = getValue() as number
+      return (
+        <div className="flex items-center gap-1">
+          <span className="font-medium">{v}</span>
+          {v > 0 && <Badge variant="secondary" className="text-xs px-1.5 py-0">{v}</Badge>}
+        </div>
+      )
+    },
+  },
+  {
+    accessorKey: 'pending_commission_amount',
+    header: 'Pending Commission',
+    cell: ({ getValue }) => {
+      const v = getValue() as number
+      return (
+        <span className={v > 0 ? 'text-sm font-medium text-amber-600' : 'text-sm text-muted-foreground'}>
+          {v > 0 ? formatCurrency(v) : '—'}
+        </span>
+      )
+    },
+  },
+  {
     id: 'commission',
     header: 'Commission Model',
     cell: ({ row }) => {

@@ -11,6 +11,7 @@ import { MembershipsSection } from '@/components/members/memberships-section'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { ArrowLeft, Pencil, Phone, Calendar, Shield, User } from 'lucide-react'
 import { ResetPasswordDialog } from '@/components/members/reset-password-dialog'
+import { PTAssignmentCard } from '@/components/pt-assignment/pt-assignment-card'
 
 interface PageProps {
   params: { id: string }
@@ -225,6 +226,24 @@ export default async function MemberDetailPage({ params }: PageProps) {
 
             {/* PT Sessions Tab */}
             <TabsContent value="pt-sessions">
+              {/* PT Assignment cards — one per PT/bundled membership */}
+              {member.memberships
+                .filter((m) => {
+                  const cat = (m as { package_category?: string }).package_category
+                  return cat === 'pt_sessions' || cat === 'bundled'
+                })
+                .map((m) => (
+                  <div key={m.id} className="mb-4">
+                    <PTAssignmentCard
+                      memberId={params.id}
+                      membershipId={m.id}
+                      packageName={
+                        (m.membership_packages as { name: string } | null)?.name ?? 'PT Membership'
+                      }
+                    />
+                  </div>
+                ))}
+
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Personal Training Sessions</CardTitle>

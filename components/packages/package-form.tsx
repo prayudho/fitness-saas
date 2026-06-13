@@ -42,6 +42,8 @@ const schema = z
     currency:              z.string().default('IDR'),
     allow_freeze:          z.boolean().default(false),
     max_freeze_days:       z.coerce.number().optional(),
+    session_commission_amount:          z.coerce.number().min(0).optional(),
+    sales_commission_override_percent:  z.coerce.number().min(0).max(100).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.package_category === 'gym_access' || data.package_category === 'bundled') {
@@ -139,11 +141,14 @@ export function PackageForm({ package: pkg, onSuccess }: PackageFormProps) {
       currency:              pkg?.currency ?? 'IDR',
       allow_freeze:          pkg?.allow_freeze ?? false,
       max_freeze_days:       pkg?.max_freeze_days ?? undefined,
+      session_commission_amount:         (pkgAny?.session_commission_amount as number | undefined) ?? undefined,
+      sales_commission_override_percent: (pkgAny?.sales_commission_override_percent as number | undefined) ?? undefined,
     },
   })
 
   const category      = useWatch({ control: form.control, name: 'package_category' })
   const allowFreeze   = useWatch({ control: form.control, name: 'allow_freeze' })
+  const showCommission = category === 'pt_sessions' || category === 'bundled'
 
   const showGymDays  = category === 'gym_access' || category === 'bundled'
   const showPTFields = category === 'pt_sessions' || category === 'bundled'
@@ -161,6 +166,8 @@ export function PackageForm({ package: pkg, onSuccess }: PackageFormProps) {
       currency:               data.currency,
       allow_freeze:           data.allow_freeze,
       max_freeze_days:        data.allow_freeze ? data.max_freeze_days : undefined,
+      session_commission_amount:         showCommission ? data.session_commission_amount : undefined,
+      sales_commission_override_percent: showCommission ? data.sales_commission_override_percent : undefined,
     }
 
     if (pkg) {
@@ -405,6 +412,58 @@ export function PackageForm({ package: pkg, onSuccess }: PackageFormProps) {
                   </FormItem>
                 )}
               />
+            )}
+
+            {/* Commission Settings — only for PT sessions / bundled */}
+            {showCommission && (
+              <div className="rounded-lg border p-4 space-y-4">
+                <p className="text-sm font-medium">Commission Settings</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="session_commission_amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Session Commission (fixed)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            placeholder="e.g. 50000"
+                            {...field}
+                            value={field.value ?? ''}
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">Paid to trainer per completed session</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="sales_commission_override_percent"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Sales Commission Override (%)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step="0.01"
+                            placeholder="Leave blank to use brand default"
+                            {...field}
+                            value={field.value ?? ''}
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">Override brand-level sales commission %</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
             )}
 
             <Button type="submit" className="w-full" disabled={isPending}>

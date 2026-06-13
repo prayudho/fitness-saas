@@ -36,6 +36,7 @@ import {
   updateBrandGeneral,
   updateBrandAppearance,
   uploadBrandLogo,
+  updateCommissionSettings,
 } from '@/lib/actions/settings'
 
 // ─── Schemas ────────────────────────────────────────────────────────────────
@@ -89,6 +90,12 @@ export default function SettingsPage() {
   const [savingAppearance, setSavingAppearance] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
 
+  // Commission state
+  const [graceDays, setGraceDays] = useState(14)
+  const [salesCommissionEnabled, setSalesCommissionEnabled] = useState(true)
+  const [salesCommissionPercent, setSalesCommissionPercent] = useState(10)
+  const [savingCommission, setSavingCommission] = useState(false)
+
   // Notifications state
   const [notifications, setNotifications] = useState({
     newMemberSignup: false,
@@ -127,6 +134,10 @@ export default function SettingsPage() {
       setLogoPreview(data.logo_url ?? null)
       setPrimaryColor(data.primary_color ?? '#6366f1')
       setSecondaryColor(data.secondary_color ?? '#8b5cf6')
+      const brandAny = data as unknown as Record<string, unknown>
+      setGraceDays((brandAny.pt_assignment_grace_days as number | undefined) ?? 14)
+      setSalesCommissionEnabled((brandAny.pt_sales_commission_enabled as boolean | undefined) ?? true)
+      setSalesCommissionPercent((brandAny.pt_sales_commission_percent as number | undefined) ?? 10)
 
       generalForm.reset({
         brandName: data.name ?? '',
@@ -209,6 +220,23 @@ export default function SettingsPage() {
     }
   }
 
+  // ── Commission submit ───────────────────────────────────────────────────────
+  async function handleCommissionSave() {
+    if (!brandId) return
+    setSavingCommission(true)
+    const { error } = await updateCommissionSettings(brandId, {
+      pt_assignment_grace_days: graceDays,
+      pt_sales_commission_enabled: salesCommissionEnabled,
+      pt_sales_commission_percent: salesCommissionPercent,
+    })
+    setSavingCommission(false)
+    if (error) {
+      toast.error(error)
+    } else {
+      toast.success('Commission settings saved')
+    }
+  }
+
   // ── Notifications submit ────────────────────────────────────────────────────
   async function handleNotificationsSave() {
     setSavingNotifications(true)
@@ -262,6 +290,7 @@ export default function SettingsPage() {
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
+          <TabsTrigger value="commission">Commission</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
 
@@ -517,6 +546,76 @@ export default function SettingsPage() {
 
               <Button onClick={handleAppearanceSave} disabled={savingAppearance}>
                 {savingAppearance ? 'Saving…' : 'Save Appearance'}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ═══ COMMISSION TAB ════════════════════════════════════════════════ */}
+        <TabsContent value="commission">
+          <Card>
+            <CardHeader>
+              <CardTitle>PT Commission Settings</CardTitle>
+              <CardDescription>
+                Configure how personal trainer commissions are calculated and when assignments
+                auto-release after a membership expires.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Grace period */}
+              <div className="space-y-2">
+                <Label htmlFor="grace-days">Assignment Grace Period (days)</Label>
+                <Input
+                  id="grace-days"
+                  type="number"
+                  min={0}
+                  max={90}
+                  value={graceDays}
+                  onChange={(e) => setGraceDays(Number(e.target.value))}
+                  className="w-32"
+                />
+                <p className="text-xs text-muted-foreground">
+                  After a PT membership expires or sessions run out, the trainer assignment stays
+                  active for this many days before auto-releasing.
+                </p>
+              </div>
+
+              {/* Sales commission toggle */}
+              <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Sales Commission</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Award a one-time commission to the trainer who closes a PT package sale
+                  </p>
+                </div>
+                <Switch
+                  checked={salesCommissionEnabled}
+                  onCheckedChange={setSalesCommissionEnabled}
+                />
+              </div>
+
+              {/* Sales commission % */}
+              {salesCommissionEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="sales-percent">Default Sales Commission (%)</Label>
+                  <Input
+                    id="sales-percent"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={salesCommissionPercent}
+                    onChange={(e) => setSalesCommissionPercent(Number(e.target.value))}
+                    className="w-32"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Percentage of the package price paid to the trainer. Can be overridden per package.
+                  </p>
+                </div>
+              )}
+
+              <Button onClick={handleCommissionSave} disabled={savingCommission}>
+                {savingCommission ? 'Saving…' : 'Save Commission Settings'}
               </Button>
             </CardContent>
           </Card>

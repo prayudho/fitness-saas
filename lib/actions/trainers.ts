@@ -15,6 +15,8 @@ export type ProfileRow = Row<'profiles'>
 export type TrainerWithProfile = TrainerRow & {
   profiles: Pick<ProfileRow, 'id' | 'full_name' | 'avatar_url' | 'phone'> | null
   sessions_this_month: number
+  active_members_count: number
+  pending_commission_amount: number
 }
 
 export type TrainerSessionWithMember = TrainerSessionRow & {
@@ -53,20 +55,44 @@ export async function getTrainers(): Promise<{ data: TrainerWithProfile[]; error
 
     if (error) throw error
 
-    const { data: sessionCounts } = await supabase
-      .from('trainer_sessions')
-      .select('trainer_id')
-      .eq('brand_id', profile.brand_id)
-      .gte('scheduled_at', startOfMonth)
+    const [sessionCountsRes, activeMembersRes, pendingPayoutsRes] = await Promise.all([
+      supabase
+        .from('trainer_sessions')
+        .select('trainer_id')
+        .eq('brand_id', profile.brand_id)
+        .gte('scheduled_at', startOfMonth),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).from('pt_assignments')
+        .select('trainer_id')
+        .eq('brand_id', profile.brand_id)
+        .in('status', ['active', 'grace_period']),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).from('pt_commission_payouts')
+        .select('trainer_id, amount')
+        .eq('brand_id', profile.brand_id)
+        .eq('status', 'pending'),
+    ])
 
     const countMap: Record<string, number> = {}
-    for (const s of sessionCounts ?? []) {
+    for (const s of sessionCountsRes.data ?? []) {
       countMap[s.trainer_id] = (countMap[s.trainer_id] ?? 0) + 1
+    }
+
+    const activeMembersMap: Record<string, number> = {}
+    for (const a of activeMembersRes.data ?? []) {
+      activeMembersMap[a.trainer_id] = (activeMembersMap[a.trainer_id] ?? 0) + 1
+    }
+
+    const pendingCommissionMap: Record<string, number> = {}
+    for (const p of pendingPayoutsRes.data ?? []) {
+      pendingCommissionMap[p.trainer_id] = (pendingCommissionMap[p.trainer_id] ?? 0) + (p.amount ?? 0)
     }
 
     const result: TrainerWithProfile[] = (trainers ?? []).map((t) => ({
       ...t,
       sessions_this_month: countMap[t.id] ?? 0,
+      active_members_count: activeMembersMap[t.id] ?? 0,
+      pending_commission_amount: pendingCommissionMap[t.id] ?? 0,
     }))
 
     return { data: result }
@@ -355,7 +381,8 @@ export async function updateSessionStatus(
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
 
-    const { data: existing, error: fetchError } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: existing, error: fetchError } = await (supabase as any)
       .from('trainer_sessions')
       .select(`*, trainers!trainer_sessions_trainer_id_fkey (commission_model, commission_value)`)
       .eq('id', id)
@@ -375,17 +402,62 @@ export async function updateSessionStatus(
       }
     }
 
-    const { data, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
       .from('trainer_sessions')
       .update({
         status,
         ...(commission_earned !== null ? { commission_earned } : {}),
+        ...(status === 'completed' ? { commission_status: 'pending' } : {}),
       })
       .eq('id', id)
       .select()
       .single()
 
     if (error) throw error
+
+    // Create a session commission payout row if there's an active PT assignment with a commission amount
+    if (status === 'completed' && data) {
+      const sessionAny = existing as Record<string, unknown>
+      const assignmentId = sessionAny.pt_assignment_id as string | null
+
+      if (assignmentId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: assignment } = await (supabase as any)
+          .from('pt_assignments')
+          .select('*, membership:memberships!pt_assignments_membership_id_fkey(membership_packages(session_commission_amount))')
+          .eq('id', assignmentId)
+          .single()
+
+        if (assignment) {
+          const pkgCommission = (
+            (assignment as unknown as {
+              membership: { membership_packages: { session_commission_amount: number | null } | null } | null
+            }).membership?.membership_packages?.session_commission_amount
+          )
+          const amount = pkgCommission ?? commission_earned
+
+          if (amount && amount > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any).from('pt_commission_payouts').insert({
+              brand_id: profile.brand_id,
+              trainer_id: existing.trainer_id,
+              payout_type: 'session',
+              pt_assignment_id: assignmentId,
+              trainer_session_id: id,
+              amount,
+              status: 'pending',
+            })
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any)
+              .from('trainer_sessions')
+              .update({ session_commission_amount: amount })
+              .eq('id', id)
+          }
+        }
+      }
+    }
 
     revalidatePath('/admin/trainers')
     revalidatePath('/trainer/sessions')

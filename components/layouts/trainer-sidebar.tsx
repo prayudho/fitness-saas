@@ -18,7 +18,8 @@ const navItems: NavItem[] = [
   { href: '/trainer/schedule', label: 'My Schedule', icon: Calendar },
   { href: '/trainer/clients', label: 'My Clients', icon: Users },
   { href: '/trainer/availability', label: 'Availability', icon: Clock },
-  { href: '/trainer/sessions', label: 'Earnings', icon: DollarSign },
+  { href: '/trainer/sessions', label: 'Sessions', icon: Clock },
+  { href: '/trainer/earnings', label: 'Earnings', icon: DollarSign },
   { href: '/trainer/account', label: 'My Account', icon: KeyRound },
 ]
 

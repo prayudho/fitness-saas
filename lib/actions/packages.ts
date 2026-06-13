@@ -30,6 +30,9 @@ export interface PackageInput {
   currency?: string
   allow_freeze?: boolean
   max_freeze_days?: number
+  // Commission fields (pt_sessions + bundled only)
+  session_commission_amount?: number
+  sales_commission_override_percent?: number
 }
 
 export interface PromoCodeInput {
@@ -101,7 +104,8 @@ export async function createPackage(
     // Derive duration_days from gym_access_days for backward compatibility
     const effectiveDurationDays = input.gym_access_days ?? input.duration_days ?? null
 
-    const { data, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
       .from('membership_packages')
       .insert({
         brand_id:              profile.brand_id!,
@@ -118,6 +122,8 @@ export async function createPackage(
         currency:              input.currency ?? 'IDR',
         allow_freeze:          input.allow_freeze ?? false,
         max_freeze_days:       input.max_freeze_days ?? null,
+        session_commission_amount:         input.session_commission_amount ?? null,
+        sales_commission_override_percent: input.sales_commission_override_percent ?? null,
       })
       .select()
       .single()
@@ -156,6 +162,14 @@ export async function updatePackage(
     if (input.currency !== undefined) updateData.currency = input.currency
     if (input.allow_freeze !== undefined) updateData.allow_freeze = input.allow_freeze
     if (input.max_freeze_days !== undefined) updateData.max_freeze_days = input.max_freeze_days
+    if (input.session_commission_amount !== undefined) {
+      const db = updateData as Record<string, unknown>
+      db.session_commission_amount = input.session_commission_amount
+    }
+    if (input.sales_commission_override_percent !== undefined) {
+      const db = updateData as Record<string, unknown>
+      db.sales_commission_override_percent = input.sales_commission_override_percent
+    }
 
     const { data, error } = await supabase
       .from('membership_packages')

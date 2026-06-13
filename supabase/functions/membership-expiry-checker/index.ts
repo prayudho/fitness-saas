@@ -23,6 +23,7 @@ interface BrandRow {
   name: string
   slug: string
   expiry_reminder_days: number[] | null
+  pt_assignment_grace_days: number
 }
 
 interface MemberProfile {
@@ -71,7 +72,7 @@ serve(async (req: Request): Promise<Response> => {
   // Fetch all brands with their reminder schedules
   const { data: brands, error: brandError } = await supabase
     .from('brands')
-    .select('id, name, slug, expiry_reminder_days')
+    .select('id, name, slug, expiry_reminder_days, pt_assignment_grace_days')
     .eq('is_active', true)
 
   if (brandError) {
@@ -182,7 +183,78 @@ serve(async (req: Request): Promise<Response> => {
     }
   }
 
-  const result = { emails_sent: emailsSent, errors, run_at: now.toISOString() }
+  // ── Grace period start + auto-release ──────────────────────────────────────
+
+  let gracePeriodStarted = 0
+  let autoReleased = 0
+
+  const { data: brandSettings } = await supabase
+    .from('brands')
+    .select('id, pt_assignment_grace_days')
+    .eq('is_active', true)
+
+  for (const brand of (brandSettings ?? []) as { id: string; pt_assignment_grace_days: number }[]) {
+    const graceDays = brand.pt_assignment_grace_days ?? 14
+
+    // 1. Start grace period for active assignments on expired/exhausted memberships
+    const { data: expiredMemberships } = await supabase
+      .from('memberships')
+      .select('id')
+      .eq('brand_id', brand.id)
+      .or('pt_sessions_status.eq.exhausted,pt_sessions_status.eq.expired')
+      .in('package_category', ['pt_sessions', 'bundled'])
+
+    for (const mem of (expiredMemberships ?? []) as { id: string }[]) {
+      const { data: activeAssignment } = await supabase
+        .from('pt_assignments')
+        .select('id')
+        .eq('brand_id', brand.id)
+        .eq('membership_id', mem.id)
+        .eq('status', 'active')
+        .maybeSingle()
+
+      if (activeAssignment) {
+        const { error: graceErr } = await supabase
+          .from('pt_assignments')
+          .update({ status: 'grace_period', grace_started_at: now.toISOString() })
+          .eq('id', activeAssignment.id)
+
+        if (!graceErr) gracePeriodStarted++
+        else errors.push(`Grace period start failed for assignment ${activeAssignment.id}: ${graceErr.message}`)
+      }
+    }
+
+    // 2. Auto-release grace period assignments that have expired their grace days
+    const { data: graceAssignments } = await supabase
+      .from('pt_assignments')
+      .select('id, grace_started_at, member_id, trainer_id')
+      .eq('brand_id', brand.id)
+      .eq('status', 'grace_period')
+      .not('grace_started_at', 'is', null)
+
+    for (const assignment of (graceAssignments ?? []) as { id: string; grace_started_at: string; member_id: string; trainer_id: string }[]) {
+      const graceStartMs = new Date(assignment.grace_started_at).getTime()
+      const graceEndMs   = graceStartMs + graceDays * 86400000
+
+      if (now.getTime() >= graceEndMs) {
+        const { error: releaseErr } = await supabase
+          .from('pt_assignments')
+          .update({ status: 'released', released_at: now.toISOString() })
+          .eq('id', assignment.id)
+
+        if (!releaseErr) autoReleased++
+        else errors.push(`Auto-release failed for assignment ${assignment.id}: ${releaseErr.message}`)
+      }
+    }
+  }
+
+  const result = {
+    emails_sent: emailsSent,
+    grace_period_started: gracePeriodStarted,
+    auto_released: autoReleased,
+    errors,
+    run_at: now.toISOString(),
+  }
   console.log('membership-expiry-checker result:', JSON.stringify(result))
 
   return new Response(JSON.stringify(result), {

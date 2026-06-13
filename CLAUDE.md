@@ -124,6 +124,19 @@ fitnessplace-saas/
 - `trainers` — trainer profile + commission config
 - `trainer_availability` — weekly recurring slots
 - `trainer_sessions` — booked sessions
+  - `pt_assignment_id` — FK to `pt_assignments.id` (nullable)
+  - `session_commission_amount` — fixed amount earned by trainer for this session
+  - `commission_status`: `'pending'` | `'approved'` | `'paid'` | `'cancelled'`
+- `pt_assignments` — links a trainer to a member's PT membership
+  - `status`: `'active'` | `'grace_period'` | `'released'` | `'reassigned'`
+  - `grace_started_at` — when grace period began (auto-started by edge function)
+  - `sales_commission_claimed` — whether a sales commission payout was created
+  - Partial unique index: only one `active`/`grace_period` assignment per `(member_id, membership_id)` at a time
+- `pt_commission_payouts` — all commission payout records
+  - `payout_type`: `'session'` | `'sales'`
+  - `status`: `'pending'` | `'approved'` | `'paid'`
+  - Session commission: created when a trainer session is marked `completed`
+  - Sales commission: created when a PT assignment is first created
 
 ### Classes
 - `class_types` — categories (yoga, HIIT, pilates, etc.)
@@ -344,6 +357,7 @@ Update this section as you build each module.
 | Super-admin panel | ✅ | ✅ | ✅ | ⬜ |
 | Membership management | ✅ | ✅ | ✅ | ⬜ |
 | Membership packages (+ category split) | ✅ | ✅ | ✅ | ⬜ |
+| PT assignment + commission | ✅ | ✅ | ✅ | ⬜ |
 | Personal trainer mgmt | ✅ | ✅ | ✅ | ⬜ |
 | Fitness class mgmt | ✅ | ✅ | ✅ | ⬜ |
 | Check-in & access | ✅ | ✅ | ✅ | ⬜ |

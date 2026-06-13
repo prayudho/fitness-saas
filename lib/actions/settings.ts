@@ -122,6 +122,44 @@ export async function updateBrandAppearance(
   return { error: null }
 }
 
+export async function updateCommissionSettings(
+  brandId: string,
+  data: {
+    pt_assignment_grace_days: number
+    pt_sales_commission_enabled: boolean
+    pt_sales_commission_percent: number
+  }
+) {
+  const supabase = createClient()
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return { error: 'Unauthorized' }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('brands')
+    .update({
+      pt_assignment_grace_days:    data.pt_assignment_grace_days,
+      pt_sales_commission_enabled: data.pt_sales_commission_enabled,
+      pt_sales_commission_percent: data.pt_sales_commission_percent,
+      updated_at:                  new Date().toISOString(),
+    })
+    .eq('id', brandId)
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath('/admin/settings')
+  return { error: null }
+}
+
 export async function uploadBrandLogo(brandId: string, formData: FormData) {
   const supabase = createClient()
   const serviceClient = createServiceClient()

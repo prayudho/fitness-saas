@@ -27,10 +27,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowLeft, MoreHorizontal, Pencil } from 'lucide-react'
+import { ArrowLeft, MoreHorizontal, Pencil, Users, DollarSign } from 'lucide-react'
 import { useTrainer, useUpdateSessionStatus } from '@/lib/hooks/use-trainers'
 import type { TrainerSessionWithMember } from '@/lib/actions/trainers'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { useTrainerActiveMembers, useTrainerPayouts, useApproveCommission, useMarkCommissionPaid } from '@/lib/hooks/use-pt-assignments'
+import type { TrainerActiveMember, PTCommissionPayoutRow } from '@/lib/actions/pt-assignment.actions'
 
 function SessionActions({ session }: { session: TrainerSessionWithMember }) {
   const mutation = useUpdateSessionStatus()
@@ -134,6 +136,131 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
   )
 }
 
+const activeMemberColumns: ColumnDef<TrainerActiveMember>[] = [
+  {
+    id: 'member',
+    header: 'Member',
+    cell: ({ row }) => (
+      <div className="flex items-center gap-2">
+        <Avatar className="h-7 w-7">
+          <AvatarImage src={row.original.member_avatar_url ?? undefined} />
+          <AvatarFallback className="text-xs">
+            {row.original.member_name.slice(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <span className="text-sm font-medium">{row.original.member_name}</span>
+      </div>
+    ),
+  },
+  {
+    accessorKey: 'package_name',
+    header: 'Package',
+    cell: ({ getValue }) => <span className="text-sm">{getValue() as string}</span>,
+  },
+  {
+    accessorKey: 'pt_sessions_remaining',
+    header: 'Sessions Left',
+    cell: ({ getValue }) => {
+      const v = getValue() as number | null
+      return <span className="text-sm">{v != null ? v : '—'}</span>
+    },
+  },
+  {
+    accessorKey: 'pt_sessions_expires_at',
+    header: 'Expires',
+    cell: ({ getValue }) => {
+      const v = getValue() as string | null
+      return <span className="text-sm text-muted-foreground">{v ? formatDate(v) : '—'}</span>
+    },
+  },
+  {
+    accessorKey: 'status',
+    header: 'Status',
+    cell: ({ getValue }) => {
+      const v = getValue() as string
+      return (
+        <Badge variant={v === 'grace_period' ? 'secondary' : 'default'} className="capitalize text-xs">
+          {v === 'grace_period' ? 'Grace Period' : 'Active'}
+        </Badge>
+      )
+    },
+  },
+]
+
+const commissionColumns: ColumnDef<PTCommissionPayoutRow & { trainer_name?: string }>[] = [
+  {
+    accessorKey: 'payout_type',
+    header: 'Type',
+    cell: ({ getValue }) => (
+      <Badge variant="outline" className="capitalize text-xs">
+        {getValue() as string}
+      </Badge>
+    ),
+  },
+  {
+    accessorKey: 'amount',
+    header: 'Amount',
+    cell: ({ getValue }) => (
+      <span className="text-sm font-medium text-green-600">{formatCurrency(getValue() as number)}</span>
+    ),
+  },
+  {
+    accessorKey: 'status',
+    header: 'Status',
+    cell: ({ getValue }) => {
+      const v = getValue() as string
+      const variant = v === 'paid' ? 'default' : v === 'approved' ? 'secondary' : 'outline'
+      return (
+        <Badge variant={variant} className="capitalize text-xs">
+          {v}
+        </Badge>
+      )
+    },
+  },
+  {
+    accessorKey: 'created_at',
+    header: 'Date',
+    cell: ({ getValue }) => (
+      <span className="text-sm text-muted-foreground">{formatDate(getValue() as string)}</span>
+    ),
+  },
+  {
+    id: 'actions',
+    header: '',
+    cell: ({ row }) => <CommissionActions payout={row.original} />,
+  },
+]
+
+function CommissionActions({ payout }: { payout: PTCommissionPayoutRow }) {
+  const approve = useApproveCommission()
+  const markPaid = useMarkCommissionPaid()
+
+  if (payout.status === 'paid') return <span className="text-xs text-muted-foreground">Paid</span>
+  if (payout.status === 'approved') {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={markPaid.isPending}
+        onClick={() => markPaid.mutate(payout.id)}
+      >
+        <DollarSign className="mr-1 h-3 w-3" />
+        Mark Paid
+      </Button>
+    )
+  }
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={approve.isPending}
+      onClick={() => approve.mutate(payout.id)}
+    >
+      Approve
+    </Button>
+  )
+}
+
 interface PageProps {
   params: { id: string }
 }
@@ -165,6 +292,9 @@ export default function TrainerDetailPage({ params }: PageProps) {
       </div>
     )
   }
+
+  const { data: activeMembers = [], isLoading: loadingMembers } = useTrainerActiveMembers(id)
+  const { data: payouts = [], isLoading: loadingPayouts } = useTrainerPayouts(id)
 
   const name = trainer.profiles?.full_name ?? 'Unknown Trainer'
   const initials = name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
@@ -210,6 +340,16 @@ export default function TrainerDetailPage({ params }: PageProps) {
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="availability">Availability</TabsTrigger>
               <TabsTrigger value="sessions">Sessions</TabsTrigger>
+              <TabsTrigger value="members">
+                <Users className="mr-1.5 h-3.5 w-3.5" />
+                Active Members
+                {activeMembers.length > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 text-xs px-1.5 py-0">
+                    {activeMembers.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="commission">Commission</TabsTrigger>
               <TabsTrigger value="stats">Stats</TabsTrigger>
             </TabsList>
 
@@ -301,6 +441,28 @@ export default function TrainerDetailPage({ params }: PageProps) {
                 isLoading={false}
                 emptyTitle="No sessions this month"
                 emptyDescription="Sessions will appear here once booked."
+              />
+            </TabsContent>
+
+            {/* Active Members Tab */}
+            <TabsContent value="members">
+              <DataTable
+                data={activeMembers}
+                columns={activeMemberColumns}
+                isLoading={loadingMembers}
+                emptyTitle="No active members"
+                emptyDescription="Members will appear here once a PT assignment is created."
+              />
+            </TabsContent>
+
+            {/* Commission Tab */}
+            <TabsContent value="commission">
+              <DataTable
+                data={payouts as (PTCommissionPayoutRow & { trainer_name?: string })[]}
+                columns={commissionColumns}
+                isLoading={loadingPayouts}
+                emptyTitle="No commission records"
+                emptyDescription="Commission payouts will appear here once sessions are completed."
               />
             </TabsContent>
 
