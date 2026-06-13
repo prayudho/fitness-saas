@@ -352,7 +352,7 @@ export async function getTeamMembers(
   const page = opts?.page ?? 1
   const offset = (page - 1) * limit
 
-  type ProfileWithCustomRole = {
+  type ProfileRow = {
     id: string
     full_name: string
     phone: string | null
@@ -362,12 +362,13 @@ export async function getTeamMembers(
     must_change_password: boolean
     created_at: string
     updated_at: string
-    custom_roles: { name: string } | null
   }
 
+  // Query profiles without an embedded join to avoid PostgREST relationship
+  // resolution issues that can cause INNER JOIN behaviour on nullable FKs.
   let query = supabase
     .from('profiles')
-    .select('id, full_name, phone, role, custom_role_id, is_active, must_change_password, created_at, updated_at, custom_roles!custom_role_id(name)', { count: 'exact' })
+    .select('id, full_name, phone, role, custom_role_id, is_active, must_change_password, created_at, updated_at', { count: 'exact' })
     .eq('brand_id', effectiveBrandId)
     .neq('role', 'member')
     .order('created_at', { ascending: false })
@@ -393,13 +394,28 @@ export async function getTeamMembers(
     return { data: [], total: 0, error: error.message }
   }
 
-  const members: TeamMember[] = ((data ?? []) as ProfileWithCustomRole[]).map((p) => ({
+  const rows = (data ?? []) as ProfileRow[]
+
+  // Fetch custom role names in a separate query for any profiles that have one.
+  const customRoleIds = [...new Set(rows.map((r) => r.custom_role_id).filter(Boolean))] as string[]
+  const roleNameMap: Record<string, string> = {}
+  if (customRoleIds.length > 0) {
+    const { data: roleRows } = await supabase
+      .from('custom_roles')
+      .select('id, name')
+      .in('id', customRoleIds)
+    for (const r of roleRows ?? []) {
+      roleNameMap[r.id] = r.name
+    }
+  }
+
+  const members: TeamMember[] = rows.map((p) => ({
     id: p.id,
     full_name: p.full_name,
     phone: p.phone,
     role: p.role,
     custom_role_id: p.custom_role_id,
-    custom_role_name: p.custom_roles?.name ?? null,
+    custom_role_name: p.custom_role_id ? (roleNameMap[p.custom_role_id] ?? null) : null,
     is_active: p.is_active,
     must_change_password: p.must_change_password,
     created_at: p.created_at,
