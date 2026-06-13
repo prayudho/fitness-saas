@@ -1,7 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { getAuthedProfile } from '@/lib/actions/utils'
 import { sendEmail } from '@/lib/email/send'
 import { renderTeamInviteEmail } from '@/lib/email/templates'
 import {
@@ -324,7 +325,7 @@ export async function deleteCustomRole(
 // getTeamMembers
 // ----------------------------------------------------------------
 export async function getTeamMembers(
-  brandId: string,
+  brandId?: string,
   opts?: {
     search?: string
     role?: string
@@ -332,6 +333,19 @@ export async function getTeamMembers(
     page?: number
   }
 ): Promise<{ data: TeamMember[]; total: number; error: string | null }> {
+  // When brandId is not supplied, derive it from the authenticated user's profile
+  let effectiveBrandId = brandId
+  if (!effectiveBrandId) {
+    try {
+      const authSupabase = createClient()
+      const { profile } = await getAuthedProfile(authSupabase)
+      if (!profile.brand_id) return { data: [], total: 0, error: 'No brand context' }
+      effectiveBrandId = profile.brand_id
+    } catch {
+      return { data: [], total: 0, error: 'Unauthorized' }
+    }
+  }
+
   const supabase = createServiceClient()
 
   const limit = 25
@@ -353,8 +367,8 @@ export async function getTeamMembers(
 
   let query = supabase
     .from('profiles')
-    .select('id, full_name, phone, role, custom_role_id, is_active, must_change_password, created_at, updated_at, custom_roles(name)', { count: 'exact' })
-    .eq('brand_id', brandId)
+    .select('id, full_name, phone, role, custom_role_id, is_active, must_change_password, created_at, updated_at, custom_roles!custom_role_id(name)', { count: 'exact' })
+    .eq('brand_id', effectiveBrandId)
     .neq('role', 'member')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
@@ -467,7 +481,7 @@ export async function getTeamMemberById(
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, full_name, phone, role, custom_role_id, is_active, must_change_password, created_at, updated_at, custom_roles(name)')
+    .select('id, full_name, phone, role, custom_role_id, is_active, must_change_password, created_at, updated_at, custom_roles!custom_role_id(name)')
     .eq('id', id)
     .single()
 

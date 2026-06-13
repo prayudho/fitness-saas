@@ -30,17 +30,16 @@ export type { TeamMember, TeamMemberDetail, CustomRole }
 // getTeamMembers
 // ----------------------------------------------------------------
 export function useTeamMembers(
-  brandId: string,
+  brandId?: string,
   filters?: { search?: string; role?: string; isActive?: boolean; page?: number }
 ) {
   return useQuery({
-    queryKey: ['team', 'list', brandId, filters],
+    queryKey: ['team', 'list', brandId ?? 'auto', filters],
     queryFn: async () => {
-      const result = await getTeamMembers(brandId, filters)
+      const result = await getTeamMembers(brandId || undefined, filters)
       if (result.error) throw new Error(result.error)
       return { data: result.data, total: result.total }
     },
-    enabled: Boolean(brandId),
   })
 }
 

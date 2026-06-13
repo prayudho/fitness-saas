@@ -258,7 +258,7 @@ function InviteTeamMemberSheet({
 function BrandTeamSection({ brandId }: { brandId: string }) {
   const [sheetOpen, setSheetOpen] = React.useState(false)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['team-members', brandId],
     queryFn: async () => {
       const result = await getTeamMembers(brandId)
@@ -292,6 +292,10 @@ function BrandTeamSection({ brandId }: { brandId: string }) {
               <Skeleton key={i} className="h-10 w-full rounded" />
             ))}
           </div>
+        ) : isError ? (
+          <p className="px-6 py-4 text-center text-sm text-destructive">
+            {(error as Error)?.message ?? 'Failed to load team members.'}
+          </p>
         ) : members.length === 0 ? (
           <p className="px-6 py-8 text-center text-sm text-muted-foreground">
             No team members yet. Click &ldquo;Add Team Member&rdquo; to invite someone.

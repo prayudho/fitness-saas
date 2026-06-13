@@ -23,7 +23,6 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 
-import { useRole } from '@/lib/hooks/use-role'
 import { useDebounce } from '@/lib/hooks/use-debounce'
 import {
   useTeamMembers,
@@ -188,7 +187,6 @@ function TeamTableSkeleton() {
 }
 
 export default function TeamPage() {
-  const { brandId } = useRole()
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -198,7 +196,7 @@ export default function TeamPage() {
   const isActiveFilter =
     statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined
 
-  const { data, isLoading } = useTeamMembers(brandId ?? '', {
+  const { data, isLoading, isError } = useTeamMembers(undefined, {
     search: debouncedSearch || undefined,
     role: roleFilter !== 'all' ? roleFilter : undefined,
     isActive: isActiveFilter,
@@ -258,6 +256,10 @@ export default function TeamPage() {
 
       {isLoading ? (
         <TeamTableSkeleton />
+      ) : isError ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-6 text-center text-sm text-destructive">
+          Failed to load team members. Check your Supabase service role key configuration.
+        </div>
       ) : (
         <DataTable
           data={members}
