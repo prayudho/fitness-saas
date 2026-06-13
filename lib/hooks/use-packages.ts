@@ -30,17 +30,15 @@ export function usePackages() {
       } = await supabase.auth.getUser()
       if (!user) throw new Error('Unauthorized')
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('brand_id')
-        .eq('id', user.id)
-        .single()
-      if (!profile?.brand_id) throw new Error('No brand context')
+      const brandId = typeof document !== 'undefined'
+        ? (document.cookie.match(/(?:^|;\s*)__fp_brand_id=([^;]+)/)?.[1] ?? null)
+        : null
+      if (!brandId) throw new Error('No brand context')
 
       const { data, error } = await supabase
         .from('membership_packages')
         .select('*')
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -123,17 +121,15 @@ export function usePromoCodes() {
       } = await supabase.auth.getUser()
       if (!user) throw new Error('Unauthorized')
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('brand_id')
-        .eq('id', user.id)
-        .single()
-      if (!profile?.brand_id) throw new Error('No brand context')
+      const brandId = typeof document !== 'undefined'
+        ? (document.cookie.match(/(?:^|;\s*)__fp_brand_id=([^;]+)/)?.[1] ?? null)
+        : null
+      if (!brandId) throw new Error('No brand context')
 
       const { data, error } = await supabase
         .from('promo_codes')
         .select('*')
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .order('created_at', { ascending: false })
 
       if (error) throw error

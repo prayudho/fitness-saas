@@ -15,16 +15,15 @@ export async function getBrandSettings() {
     return { data: null, error: 'Unauthorized' }
   }
 
-  // Resolve brand_id from the user's profile (works for all roles, not just brand owners)
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('brand_id')
-    .eq('id', user.id)
-    .single()
+  // Resolve brand_id from the x-brand-id header (set by middleware from subdomain)
+  const { headers: getHeaders } = await import('next/headers')
+  const brandIdFromHeader = getHeaders().get('x-brand-id')
 
-  if (profileError || !profile?.brand_id) {
-    return { data: null, error: 'Could not resolve brand for this account' }
+  if (!brandIdFromHeader) {
+    return { data: null, error: 'Could not resolve brand for this request' }
   }
+
+  const profile = { brand_id: brandIdFromHeader }
 
   const { data, error } = await supabase
     .from('brands')

@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { AdminSidebar } from '@/components/layouts/admin-sidebar'
 import { TopBar } from '@/components/layouts/topbar'
@@ -13,25 +14,41 @@ export default async function AdminLayout({
 }) {
   const supabase = createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  if (!user) {
-    redirect('/login')
+  const brandId = headers().get('x-brand-id')
+
+  // Resolve role from the per-brand profile (supports multi-brand users)
+  let profileRole: string | null = null
+  if (brandId) {
+    const profileResult = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .eq('brand_id', brandId)
+      .maybeSingle()
+    profileRole = ((profileResult.data as unknown) as { role: string } | null)?.role ?? null
   }
 
-  const role: string = user.app_metadata?.role ?? ''
+  // Fall back to JWT role for superadmin (no brand context)
+  const role = profileRole ?? (user.app_metadata?.role as string | undefined) ?? ''
 
   if (role !== 'admin' && role !== 'superadmin') {
-    redirect('/login')
+    redirect('/no-access')
   }
 
-  const { data: brand } = await supabase
-    .from('brands')
-    .select('name,logo_url,primary_color,secondary_color')
-    .eq('owner_id', user.id)
-    .single()
+  // Fetch brand settings for theme + display
+  type BrandTheme = { name: string; logo_url: string | null; primary_color: string | null; secondary_color: string | null }
+  let brand: BrandTheme | null = null
+  if (brandId) {
+    const brandResult = await supabase
+      .from('brands')
+      .select('name, logo_url, primary_color, secondary_color')
+      .eq('id', brandId)
+      .maybeSingle()
+    brand = (brandResult.data as unknown) as BrandTheme | null
+  }
 
   return (
     <BrandThemeProvider

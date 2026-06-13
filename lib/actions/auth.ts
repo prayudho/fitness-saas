@@ -1,26 +1,46 @@
 'use server'
 
+import { headers } from 'next/headers'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { revalidatePath } from 'next/cache'
 
 export async function signIn(
   formData: FormData
 ): Promise<{ error: string | null; role: string | null }> {
-  const email = formData.get('email') as string
+  const email    = formData.get('email') as string
   const password = formData.get('password') as string
 
   const supabase = createClient()
-
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
-  if (error) {
-    return { error: error.message, role: null }
+  if (error) return { error: error.message, role: null }
+
+  // Resolve brand context from the subdomain header set by middleware
+  const brandId = headers().get('x-brand-id')
+
+  if (brandId) {
+    const profileResult = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .eq('brand_id', brandId)
+      .maybeSingle()
+    const profile = (profileResult.data as unknown) as { role: string } | null
+
+    if (!profile) {
+      // Valid auth account but no profile at this brand
+      await supabase.auth.signOut()
+      return {
+        error: 'You do not have an account at this gym. Please contact the gym admin.',
+        role: null,
+      }
+    }
+
+    return { error: null, role: profile.role }
   }
 
-  const role = data.user?.app_metadata?.role ?? 'member'
-
-  return { error: null, role }
+  // No brand context — main domain (superadmin or brand owner registration)
+  return { error: null, role: (data.user.app_metadata?.role as string | null) ?? 'member' }
 }
 
 export async function signUp(
@@ -29,13 +49,12 @@ export async function signUp(
   const brandName = formData.get('brandName') as string
   const brandSlug = formData.get('brandSlug') as string
   const ownerName = formData.get('ownerName') as string
-  const email = formData.get('email') as string
-  const password = formData.get('password') as string
+  const email     = formData.get('email') as string
+  const password  = formData.get('password') as string
 
   if (!/^[a-z0-9-]+$/.test(brandSlug)) {
     return { error: 'Brand slug may only contain lowercase letters, numbers, and hyphens.' }
   }
-
   if (password.length < 8) {
     return { error: 'Password must be at least 8 characters.' }
   }
@@ -50,19 +69,17 @@ export async function signUp(
     user_metadata: { full_name: ownerName },
   })
 
-  if (authError) {
-    return { error: authError.message }
-  }
+  if (authError) return { error: authError.message }
 
   const userId = authData.user.id
 
   const { data: brand, error: brandError } = await serviceClient
     .from('brands')
     .insert({
-      name: brandName,
-      slug: brandSlug,
-      owner_user_id: userId,
-      is_active: true,
+      name:              brandName,
+      slug:              brandSlug,
+      owner_user_id:     userId,
+      is_active:         true,
       subscription_plan: 'starter',
     })
     .select()
@@ -73,11 +90,12 @@ export async function signUp(
     return { error: brandError.message }
   }
 
-  // Update the auto-created profile (handle_new_user trigger created it with role='member')
+  // The trigger created a NULL-brand shell profile. Update it to the real brand.
   await serviceClient
     .from('profiles')
     .update({ full_name: ownerName, role: 'admin', brand_id: brand.id })
     .eq('id', userId)
+    .is('brand_id', null)
 
   return { error: null }
 }
@@ -92,12 +110,10 @@ export async function requestPasswordReset(
   email: string
 ): Promise<{ error: string | null }> {
   const supabase = createClient()
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
-
+  const siteUrl  = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: siteUrl + '/reset-password',
   })
-
   return { error: error?.message ?? null }
 }
 
@@ -105,23 +121,19 @@ export async function updatePassword(
   password: string
 ): Promise<{ error: string | null }> {
   const supabase = createClient()
-
   const { error } = await supabase.auth.updateUser({ password })
-
   return { error: error?.message ?? null }
 }
 
 export async function getUser() {
   const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
   return user
 }
 
 export async function getUserRole(): Promise<string | null> {
   const user = await getUser()
-  return user?.app_metadata?.role ?? null
+  return (user?.app_metadata?.role as string | null) ?? null
 }
 
 export async function resetMemberPasswordByAdmin(
@@ -131,7 +143,6 @@ export async function resetMemberPasswordByAdmin(
   if (newPassword.length < 8) {
     return { error: 'Password must be at least 8 characters' }
   }
-
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' }
@@ -145,30 +156,20 @@ export async function resetMemberPasswordByAdmin(
   const { error } = await serviceClient.auth.admin.updateUserById(profileId, {
     password: newPassword,
   })
-
   return { error: error?.message ?? null }
 }
 
 export async function setMustChangePasswordFalse(): Promise<{ error: string | null }> {
   const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return { error: 'Not authenticated' }
-  }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
 
   const serviceClient = createServiceClient()
+  const brandId = headers().get('x-brand-id')
 
-  const { error } = await serviceClient
-    .from('profiles')
-    .update({ must_change_password: false })
-    .eq('id', user.id)
+  // Update only the profile at the current brand (password flag is brand-scoped)
+  const query = serviceClient.from('profiles').update({ must_change_password: false }).eq('id', user.id)
+  const { error } = await (brandId ? query.eq('brand_id', brandId) : query.is('brand_id', null))
 
-  if (error) {
-    return { error: error.message }
-  }
-
-  return { error: null }
+  return { error: error?.message ?? null }
 }

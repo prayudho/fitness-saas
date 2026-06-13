@@ -371,43 +371,60 @@ export async function registerMemberByAdmin(input: RegisterMemberInput): Promise
     return { data: null, error: brandError?.message ?? 'Brand not found' }
   }
 
-  const { data: existingUsersData, error: listUsersError } = await supabase.auth.admin.listUsers()
-  if (listUsersError) {
-    return { data: null, error: listUsersError.message }
+  let tempPassword: string | undefined
+
+  // Check if an auth account already exists for this email
+  const { data: existingAuthUserId } = await supabase
+    .rpc('get_auth_user_id_by_email', { p_email: validated.email })
+
+  let authUserId: string
+  let mustChangePassword: boolean
+
+  if (existingAuthUserId) {
+    // Existing global user — check they don't already have a profile at this brand
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', existingAuthUserId as string)
+      .eq('brand_id', validated.brandId)
+      .maybeSingle()
+
+    if (existingProfile) {
+      return { data: null, error: 'This person already has an account at this gym' }
+    }
+
+    authUserId         = existingAuthUserId as string
+    mustChangePassword = false  // they already have their own password
+  } else {
+    // New user — create auth account (trigger will create the profile)
+    tempPassword = crypto.randomUUID().slice(0, 8) + 'A1'
+
+    const { data: authData, error: createUserError } = await supabase.auth.admin.createUser({
+      email: validated.email,
+      password: tempPassword,
+      email_confirm: true,
+      app_metadata: {
+        role:                 'member',
+        brand_id:             validated.brandId,
+        must_change_password: true,
+      },
+      user_metadata: { full_name: validated.fullName },
+    })
+
+    if (createUserError || !authData.user) {
+      return { data: null, error: createUserError?.message ?? 'Failed to create user' }
+    }
+
+    authUserId         = authData.user.id
+    mustChangePassword = true
   }
-  const existingUser = existingUsersData.users.find(
-    (u) => u.email?.toLowerCase() === validated.email.toLowerCase()
-  )
-  if (existingUser) {
-    return { data: null, error: 'This email is already registered' }
-  }
 
-  const tempPassword = crypto.randomUUID().slice(0, 8) + 'A1'
-
-  const { data: authData, error: createUserError } = await supabase.auth.admin.createUser({
-    email: validated.email,
-    password: tempPassword,
-    email_confirm: true,
-    app_metadata: {
-      role: 'member',
-      brand_id: validated.brandId,
-      must_change_password: true,
-    },
-    user_metadata: { full_name: validated.fullName },
-  })
-
-  if (createUserError || !authData.user) {
-    return { data: null, error: createUserError?.message ?? 'Failed to create user' }
-  }
-
-  const authUserId = authData.user.id
-
-  const profileUpdate: ProfileUpdate = {
+  const profileFields: ProfileUpdate = {
     full_name:            validated.fullName,
     role:                 'member',
     brand_id:             validated.brandId,
     phone:                validated.phone,
-    must_change_password: true,
+    must_change_password: mustChangePassword,
     is_active:            true,
     ...(validated.dateOfBirth !== undefined && { date_of_birth: validated.dateOfBirth }),
     ...(validated.gender !== undefined && { gender: validated.gender }),
@@ -419,14 +436,27 @@ export async function registerMemberByAdmin(input: RegisterMemberInput): Promise
     }),
   }
 
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .update(profileUpdate as Database['public']['Tables']['profiles']['Update'])
-    .eq('id', authUserId)
+  if (existingAuthUserId) {
+    // Existing user: INSERT a new profile row for this brand
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({ id: authUserId, ...profileFields } as Database['public']['Tables']['profiles']['Insert'])
 
-  if (profileError) {
-    await supabase.auth.admin.deleteUser(authUserId)
-    return { data: null, error: profileError.message }
+    if (profileError) {
+      return { data: null, error: profileError.message }
+    }
+  } else {
+    // New user: trigger created a profile with brand_id from app_metadata; UPDATE extras
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update(profileFields as Database['public']['Tables']['profiles']['Update'])
+      .eq('id', authUserId)
+      .eq('brand_id', validated.brandId)
+
+    if (profileError) {
+      await supabase.auth.admin.deleteUser(authUserId)
+      return { data: null, error: profileError.message }
+    }
   }
 
   let membershipId: string | null = null
@@ -443,7 +473,8 @@ export async function registerMemberByAdmin(input: RegisterMemberInput): Promise
     )
 
     if (activationError || !activationData) {
-      await supabase.auth.admin.deleteUser(authUserId)
+      // Only delete the auth user if we just created them (not for existing users)
+      if (!existingAuthUserId) await supabase.auth.admin.deleteUser(authUserId)
       return { data: null, error: activationError ?? 'Failed to create membership' }
     }
 
@@ -500,7 +531,7 @@ export async function registerMemberByAdmin(input: RegisterMemberInput): Promise
     }
   }
 
-  if (validated.sendWelcomeEmail) {
+  if (validated.sendWelcomeEmail && tempPassword) {
     const { subject, html } = renderWelcomeEmail({
       memberName:  validated.fullName,
       brandName:   brand.name,

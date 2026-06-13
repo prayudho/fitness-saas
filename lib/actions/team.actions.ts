@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import type { Database } from '@/types/database'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getAuthedProfile } from '@/lib/actions/utils'
 import { sendEmail } from '@/lib/email/send'
@@ -72,45 +73,96 @@ export async function inviteTeamMember(
     return { data: null, error: brandError?.message ?? 'Brand not found' }
   }
 
-  // Create auth user
+  // Check if an auth account already exists for this email
+  const { data: existingUserId } = await supabase
+    .rpc('get_auth_user_id_by_email', { p_email: email })
+
+  let userId: string
+
+  if (existingUserId) {
+    // ── Existing user: just INSERT a new profile row for this brand ──────
+    userId = existingUserId as string
+
+    // Guard: ensure they don't already have a profile at this brand
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', userId)
+      .eq('brand_id', brandId)
+      .maybeSingle()
+
+    if (existingProfile) {
+      return { data: null, error: 'This person already has an account at this gym' }
+    }
+
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id:                   userId,
+        brand_id:             brandId,
+        full_name:            fullName,
+        role:                 role as 'admin' | 'staff' | 'trainer' | 'support' | 'member',
+        custom_role_id:       customRoleId ?? null,
+        must_change_password: false,  // they already have their own password
+        is_active:            true,
+        phone:                phone ?? null,
+      })
+      .select('id')
+      .single()
+
+    if (profileError || !profileData) {
+      return { data: null, error: profileError?.message ?? 'Failed to create profile' }
+    }
+
+    const { subject, html } = renderTeamInviteEmail({
+      memberName: fullName,
+      brandName:  brand.name,
+      role,
+      email,
+      tempPassword: '(use your existing password)',
+      loginUrl: `https://${brand.slug}.gerak.online/login`,
+    })
+    const { error: emailError } = await sendEmail(email, subject, html)
+    if (emailError) console.error('[inviteTeamMember] email send failed:', emailError)
+
+    return { data: { userId, profileId: profileData.id }, error: null }
+  }
+
+  // ── New user: create auth account + let trigger create the profile ───
   const { data: authData, error: createError } = await supabase.auth.admin.createUser({
     email,
     password: tempPassword,
     email_confirm: true,
     app_metadata: {
       role,
-      brand_id: brandId,
+      brand_id:             brandId,
       must_change_password: true,
     },
-    user_metadata: {
-      full_name: fullName,
-    },
+    user_metadata: { full_name: fullName },
   })
 
   if (createError || !authData.user) {
     return { data: null, error: createError?.message ?? 'Failed to create user' }
   }
 
-  const userId = authData.user.id
+  userId = authData.user.id
 
-  // Update the auto-created profile from the trigger
+  // Trigger created the profile with brand_id from app_metadata. Update extras.
   const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .update({
-      full_name: fullName,
-      role: role as 'admin' | 'staff' | 'trainer' | 'support' | 'member',
-      brand_id: brandId,
-      custom_role_id: customRoleId ?? null,
+      full_name:            fullName,
+      custom_role_id:       customRoleId ?? null,
       must_change_password: true,
-      is_active: true,
-      phone: phone ?? null,
+      is_active:            true,
+      phone:                phone ?? null,
     })
     .eq('id', userId)
+    .eq('brand_id', brandId)
     .select('id')
     .single()
 
   if (profileError || !profileData) {
-    // Rollback: delete the auth user so we don't leave orphaned credentials
     await supabase.auth.admin.deleteUser(userId)
     return { data: null, error: profileError?.message ?? 'Failed to update profile' }
   }
@@ -150,6 +202,11 @@ export async function updateTeamMember(
   const { fullName, phone, role, customRoleId } = parsed.data
   const supabase = createServiceClient()
 
+  // Derive caller's brand so we scope the update to the correct profile row
+  const authSupabase = createClient()
+  const { profile: callerProfile } = await getAuthedProfile(authSupabase)
+  if (!callerProfile.brand_id) return { data: null, error: 'No brand context' }
+
   const { error } = await supabase
     .from('profiles')
     .update({
@@ -159,6 +216,7 @@ export async function updateTeamMember(
       ...(customRoleId !== undefined && { custom_role_id: customRoleId }),
     })
     .eq('id', id)
+    .eq('brand_id', callerProfile.brand_id)
 
   if (error) {
     return { data: null, error: error.message }
@@ -187,10 +245,15 @@ export async function deactivateTeamMember(
     return { data: null, error: fetchError?.message ?? 'Profile not found' }
   }
 
+  const authSupabase = createClient()
+  const { profile: callerProfile } = await getAuthedProfile(authSupabase)
+  if (!callerProfile.brand_id) return { data: null, error: 'No brand context' }
+
   const { error: updateError } = await supabase
     .from('profiles')
     .update({ is_active: false })
     .eq('id', id)
+    .eq('brand_id', callerProfile.brand_id)
 
   if (updateError) {
     return { data: null, error: updateError.message }
@@ -211,10 +274,15 @@ export async function reactivateTeamMember(
 ): Promise<{ data: null; error: string | null }> {
   const supabase = createServiceClient()
 
+  const authSupabase = createClient()
+  const { profile: callerProfile } = await getAuthedProfile(authSupabase)
+  if (!callerProfile.brand_id) return { data: null, error: 'No brand context' }
+
   const { error } = await supabase
     .from('profiles')
     .update({ is_active: true })
     .eq('id', id)
+    .eq('brand_id', callerProfile.brand_id)
 
   if (error) {
     return { data: null, error: error.message }
@@ -381,7 +449,7 @@ export async function getTeamMembers(
   }
 
   if (opts?.role) {
-    query = query.eq('role', opts.role)
+    query = query.eq('role', opts.role as Database['public']['Enums']['user_role'])
   }
 
   if (opts?.isActive !== undefined) {
@@ -495,10 +563,14 @@ export async function getTeamMemberById(
     custom_roles: { name: string } | null
   }
 
+  const authSupabase = createClient()
+  const { profile: callerProfile } = await getAuthedProfile(authSupabase)
+
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('id, full_name, phone, role, custom_role_id, is_active, must_change_password, created_at, updated_at, custom_roles!custom_role_id(name)')
     .eq('id', id)
+    .eq('brand_id', callerProfile.brand_id ?? '')
     .single()
 
   if (profileError || !profile) {

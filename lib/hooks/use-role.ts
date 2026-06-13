@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { getClientBrandId } from '@/lib/utils/brand'
 
 interface RoleState {
   role: string | null
@@ -12,9 +13,9 @@ interface RoleState {
 
 export function useRole() {
   const [state, setState] = useState<RoleState>({
-    role: null,
+    role:    null,
     brandId: null,
-    userId: null,
+    userId:  null,
     loading: true,
   })
 
@@ -25,15 +26,18 @@ export function useRole() {
         setState((s) => ({ ...s, loading: false }))
         return
       }
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, brand_id')
-        .eq('id', user.id)
-        .single()
+
+      const brandId = getClientBrandId()
+
+      const rawResult = brandId
+        ? await supabase.from('profiles').select('role, brand_id').eq('id', user.id).eq('brand_id', brandId).maybeSingle()
+        : await supabase.from('profiles').select('role, brand_id').eq('id', user.id).is('brand_id', null).maybeSingle()
+      const profile = (rawResult.data as unknown) as { role: string; brand_id: string | null } | null
+
       setState({
-        role: profile?.role ?? null,
-        brandId: profile?.brand_id ?? null,
-        userId: user.id,
+        role:    profile?.role ?? null,
+        brandId: profile?.brand_id ?? brandId,
+        userId:  user.id,
         loading: false,
       })
     })

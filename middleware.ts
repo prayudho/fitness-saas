@@ -3,11 +3,11 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
-  // 1. Call updateSession to refresh the session and get a response
+  // 1. Refresh session cookies
   const response = await updateSession(request)
 
-  // 2. Extract subdomain and set x-tenant-subdomain header
-  const hostname = request.headers.get('host') ?? ''
+  // 2. Resolve subdomain
+  const hostname  = request.headers.get('host') ?? ''
   const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN ?? 'gerak.online'
 
   const isMainDomain =
@@ -16,12 +16,15 @@ export async function middleware(request: NextRequest) {
     /^localhost(:\d+)?$/.test(hostname) ||
     /^127\.0\.0\.1(:\d+)?$/.test(hostname)
 
-  if (!isMainDomain) {
-    const subdomain = hostname.split('.')[0]
-    if (subdomain && subdomain !== 'www') {
-      response.headers.set('x-tenant-subdomain', subdomain)
+  let subdomain: string | null = null
 
-      // Redirect root path on a subdomain to /login (the brand portal entry point)
+  if (!isMainDomain) {
+    const sub = hostname.split('.')[0]
+    if (sub && sub !== 'www') {
+      subdomain = sub
+      response.headers.set('x-tenant-subdomain', sub)
+
+      // Redirect bare subdomain root → /login
       if (request.nextUrl.pathname === '/') {
         const loginUrl = request.nextUrl.clone()
         loginUrl.pathname = '/login'
@@ -30,11 +33,12 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 3. Set x-url and x-pathname headers
-  response.headers.set('x-url', request.url)
+  // 3. Common headers
+  response.headers.set('x-url',      request.url)
   response.headers.set('x-pathname', request.nextUrl.pathname)
 
-  // 4. Create Supabase client from request/response cookies and get user
+  // 4. Supabase client (reads cookies, does NOT forward brand header here
+  //    since we're in middleware before the brand is fully resolved)
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -55,35 +59,70 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // 5. Resolve brand_id from subdomain (one cheap indexed lookup)
+  let brandId: string | null = null
+  if (subdomain) {
+    const { data: brand } = await supabase
+      .from('brands')
+      .select('id')
+      .eq('slug', subdomain)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (brand?.id) {
+      brandId = brand.id
+      // Set header for server components/actions and the Supabase client factory
+      response.headers.set('x-brand-id', brand.id)
+      // Set cookie so client-side hooks can read brand_id without an extra query
+      response.cookies.set('__fp_brand_id', brand.id, {
+        path:     '/',
+        sameSite: 'lax',
+        secure:   process.env.NODE_ENV === 'production',
+        httpOnly: false,   // must be readable by client JS
+        maxAge:   60 * 60 * 24 * 365,
+      })
+    }
+  }
 
   const pathname = request.nextUrl.pathname
 
-  // 5a. Force password change — check before any protected-path or role logic
+  // 6. Must-change-password check + resolve per-brand role
   const isMustChangePasswordExempt =
     pathname === '/change-password' ||
     pathname === '/login' ||
     pathname.startsWith('/api/')
 
-  if (user && !isMustChangePasswordExempt) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('must_change_password')
-      .eq('id', user.id)
-      .single()
+  let brandRole: string | null = null
 
-    if (profile?.must_change_password === true) {
-      const changePasswordUrl = request.nextUrl.clone()
-      changePasswordUrl.pathname = '/change-password'
-      return NextResponse.redirect(changePasswordUrl)
+  if (user) {
+    if (!isMustChangePasswordExempt && brandId) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('must_change_password, role')
+        .eq('id', user.id)
+        .eq('brand_id', brandId)
+        .maybeSingle()
+
+      if (profile?.must_change_password === true) {
+        const changePasswordUrl = request.nextUrl.clone()
+        changePasswordUrl.pathname = '/change-password'
+        return NextResponse.redirect(changePasswordUrl)
+      }
+
+      // Brand-specific role wins over JWT role for routing decisions
+      brandRole = (profile?.role as string | null) ?? null
+    }
+
+    if (!brandRole) {
+      brandRole = (user.app_metadata?.role as string | undefined) ?? null
     }
   }
 
-  // 5. Protected paths — redirect unauthenticated users to /login
+  // 7. Protected paths
   const protectedPaths = ['/admin', '/staff', '/trainer', '/member', '/superadmin']
-  const isProtected = protectedPaths.some((p) => pathname.startsWith(p))
+  const isProtected    = protectedPaths.some((p) => pathname.startsWith(p))
 
   if (isProtected && !user) {
     const loginUrl = request.nextUrl.clone()
@@ -91,90 +130,61 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // 6. Role-based routing
-  const role = user?.app_metadata?.role as string | undefined
-
-  if (role && user) {
-    if (role === 'member') {
+  // 8. Role-based route guards (prevents wrong-portal access)
+  if (brandRole && user) {
+    if (brandRole === 'member') {
       if (
         pathname.startsWith('/admin') ||
         pathname.startsWith('/staff') ||
         pathname.startsWith('/trainer') ||
         pathname.startsWith('/superadmin')
       ) {
-        const redirectUrl = request.nextUrl.clone()
-        redirectUrl.pathname = '/member'
-        return NextResponse.redirect(redirectUrl)
+        return NextResponse.redirect(new URL('/member', request.url))
       }
     }
 
-    if (role === 'staff') {
+    if (brandRole === 'staff') {
       if (
         pathname.startsWith('/admin') ||
         pathname.startsWith('/trainer') ||
         pathname.startsWith('/superadmin')
       ) {
-        const redirectUrl = request.nextUrl.clone()
-        redirectUrl.pathname = '/staff/checkin'
-        return NextResponse.redirect(redirectUrl)
+        return NextResponse.redirect(new URL('/staff/checkin', request.url))
       }
     }
 
-    if (role === 'trainer') {
+    if (brandRole === 'trainer') {
       if (
         pathname.startsWith('/admin') ||
         pathname.startsWith('/staff') ||
         pathname.startsWith('/superadmin')
       ) {
-        const redirectUrl = request.nextUrl.clone()
-        redirectUrl.pathname = '/trainer/schedule'
-        return NextResponse.redirect(redirectUrl)
+        return NextResponse.redirect(new URL('/trainer/schedule', request.url))
       }
     }
 
-    if (role === 'admin') {
+    if (brandRole === 'admin') {
       if (pathname.startsWith('/superadmin')) {
-        const redirectUrl = request.nextUrl.clone()
-        redirectUrl.pathname = '/admin/dashboard'
-        return NextResponse.redirect(redirectUrl)
+        return NextResponse.redirect(new URL('/admin/dashboard', request.url))
       }
     }
 
-    // role === 'superadmin' can access everything — no restriction needed
-
-    // 7. Redirect authenticated users away from /login and /register
+    // Redirect away from /login and /register when already authenticated
     if (pathname === '/login' || pathname === '/register') {
-      const redirectUrl = request.nextUrl.clone()
-
-      switch (role) {
-        case 'superadmin':
-          redirectUrl.pathname = '/superadmin/dashboard'
-          break
-        case 'admin':
-          redirectUrl.pathname = '/admin/dashboard'
-          break
-        case 'staff':
-          redirectUrl.pathname = '/staff/checkin'
-          break
-        case 'trainer':
-          redirectUrl.pathname = '/trainer/schedule'
-          break
-        case 'member':
-        default:
-          redirectUrl.pathname = '/member'
-          break
-      }
-
-      return NextResponse.redirect(redirectUrl)
+      let dest = '/member'
+      if (brandRole === 'superadmin') dest = '/superadmin/dashboard'
+      else if (brandRole === 'admin')  dest = '/admin/dashboard'
+      else if (brandRole === 'staff')  dest = '/staff/checkin'
+      else if (brandRole === 'trainer') dest = '/trainer/schedule'
+      return NextResponse.redirect(new URL(dest, request.url))
     }
   }
 
-  // 8. Set x-user-role header
-  if (role) {
-    response.headers.set('x-user-role', role)
+  // 9. Expose role header for layouts
+  if (brandRole) {
+    response.headers.set('x-user-role', brandRole)
   }
 
-  // 9. Return the response
   return response
 }
 

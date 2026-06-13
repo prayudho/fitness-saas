@@ -50,12 +50,12 @@ function daysClass(days: number | null): string {
 }
 
 async function getBrandId(): Promise<string> {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Unauthorized')
-  const { data: profile } = await supabase.from('profiles').select('brand_id').eq('id', user.id).single()
-  if (!profile?.brand_id) throw new Error('No brand context')
-  return profile.brand_id
+  // Read brand_id from the __fp_brand_id cookie set by middleware
+  const brandId = typeof document !== 'undefined'
+    ? (document.cookie.match(/(?:^|;\s*)__fp_brand_id=([^;]+)/)?.[1] ?? null)
+    : null
+  if (!brandId) throw new Error('No brand context')
+  return brandId
 }
 
 export default function ExpiryReportPage() {

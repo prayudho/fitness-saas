@@ -13,58 +13,57 @@ export default async function MemberLayout({
 }) {
   const supabase = createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  if (!user) {
-    redirect('/login')
+  const headersList = headers()
+  const subdomain   = headersList.get('x-tenant-subdomain')
+  const brandId     = headersList.get('x-brand-id')
+
+  // Resolve profile for the current brand
+  let profileRole: string | null = null
+  let memberFullName: string | null = null
+  let avatarUrl: string | null = null
+
+  if (brandId) {
+    const profileResult = await supabase
+      .from('profiles')
+      .select('role, full_name, avatar_url')
+      .eq('id', user.id)
+      .eq('brand_id', brandId)
+      .maybeSingle()
+    const profile = (profileResult.data as unknown) as { role: string; full_name: string | null; avatar_url: string | null } | null
+
+    profileRole    = profile?.role ?? null
+    memberFullName = profile?.full_name ?? null
+    avatarUrl      = profile?.avatar_url ?? null
   }
 
-  const role: string = user.app_metadata?.role ?? ''
+  const role = profileRole ?? (user.app_metadata?.role as string | undefined) ?? ''
 
   if (role !== 'member') {
-    redirect('/login')
+    redirect('/no-access')
   }
 
-  // Fetch member profile
-  const { data: member } = await supabase
-    .from('profiles')
-    .select('full_name,avatar_url')
-    .eq('id', user.id)
-    .single()
-
-  // Fetch brand from x-tenant-subdomain header
-  const headersList = headers()
-  const subdomain = headersList.get('x-tenant-subdomain')
-
-  let brand: {
-    name: string
-    primary_color: string
-    logo_url?: string | null
-  } | null = null
-
+  // Fetch brand theme
+  type BrandTheme = { name: string; primary_color: string; logo_url?: string | null }
+  let brand: BrandTheme | null = null
   if (subdomain) {
-    const { data } = await supabase
+    const brandResult = await supabase
       .from('brands')
-      .select('name,logo_url,primary_color')
+      .select('name, logo_url, primary_color')
       .eq('slug', subdomain)
       .eq('is_active', true)
-      .single()
-    brand = data
+      .maybeSingle()
+    brand = (brandResult.data as unknown) as BrandTheme | null
   }
 
-  const displayName = member?.full_name ?? user.user_metadata?.full_name ?? undefined
+  const displayName  = memberFullName ?? user.user_metadata?.full_name ?? undefined
   const displayEmail = user.email ?? undefined
-  const avatarUrl = member?.avatar_url ?? null
 
   return (
     <div
-      style={
-        {
-          '--brand-primary': brand?.primary_color ?? '#6366f1',
-        } as React.CSSProperties
-      }
+      style={{ '--brand-primary': brand?.primary_color ?? '#6366f1' } as React.CSSProperties}
     >
       <div className="flex h-screen bg-background">
         <MemberSidebar

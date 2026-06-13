@@ -101,11 +101,15 @@ async function fetchPermissions(): Promise<PermissionsQueryResult> {
 
   // For 'support' role or any role that may have a custom_role_id, fetch
   // the profile and join the custom_role permissions
-  const { data: profileData, error: profileError } = await supabase
-    .from('profiles')
-    .select('custom_role_id, role')
-    .eq('id', user.id)
-    .single()
+  const brandId = typeof document !== 'undefined'
+    ? (document.cookie.match(/(?:^|;\s*)__fp_brand_id=([^;]+)/)?.[1] ?? null)
+    : null
+
+  const profileRaw = brandId
+    ? await supabase.from('profiles').select('custom_role_id, role').eq('id', user.id).eq('brand_id', brandId).maybeSingle()
+    : await supabase.from('profiles').select('custom_role_id, role').eq('id', user.id).is('brand_id', null).maybeSingle()
+  const profileData = (profileRaw.data as unknown) as { custom_role_id: string | null; role: string } | null
+  const profileError = profileRaw.error
 
   if (profileError || !profileData) {
     return { role, permissions: BUILT_IN_PERMISSIONS[role ?? ''] ?? {} }
@@ -129,7 +133,7 @@ async function fetchPermissions(): Promise<PermissionsQueryResult> {
       .from('custom_roles')
       .select('permissions')
       .eq('id', profileData.custom_role_id)
-      .single() as Promise<{ data: { permissions: unknown } | null; error: { message: string } | null }>
+      .single() as unknown as Promise<{ data: { permissions: unknown } | null; error: { message: string } | null }>
   )
 
   if (customRoleError || !customRole) {

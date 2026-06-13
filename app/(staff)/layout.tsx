@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { StaffSidebar } from '@/components/layouts/staff-sidebar'
 import { Navbar } from '@/components/shared/navbar'
@@ -7,18 +8,26 @@ import { Toaster } from '@/components/ui/sonner'
 
 export default async function StaffLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  if (!user) {
-    redirect('/login')
+  const brandId = headers().get('x-brand-id')
+
+  let profileRole: string | null = null
+  if (brandId) {
+    const profileResult = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .eq('brand_id', brandId)
+      .maybeSingle()
+    profileRole = ((profileResult.data as unknown) as { role: string } | null)?.role ?? null
   }
 
-  const role = user.app_metadata?.role as string | undefined
+  const role = profileRole ?? (user.app_metadata?.role as string | undefined) ?? ''
 
   if (role !== 'staff' && role !== 'admin') {
-    redirect('/login')
+    redirect('/no-access')
   }
 
   return (
