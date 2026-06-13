@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { format } from 'date-fns'
+import { CalendarIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { useCreateClass } from '@/lib/hooks/use-classes'
-import { useClassTypes } from '@/lib/hooks/use-classes'
+import { useCreateClass, useClassTypes } from '@/lib/hooks/use-classes'
 import {
   Form,
   FormControl,
@@ -24,6 +25,9 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { cn } from '@/lib/utils'
 import type { ClassInput } from '@/lib/actions/classes'
 
 const schema = z.object({
@@ -32,6 +36,7 @@ const schema = z.object({
   room: z.string().optional(),
   capacity: z.coerce.number().int().min(1, 'Capacity must be at least 1'),
   duration_minutes: z.coerce.number().int().min(1, 'Duration is required'),
+  // Stored as 'YYYY-MM-DDTHH:MM' in local time — combined from the date picker + time input
   scheduled_at: z.string().min(1, 'Date and time is required'),
 })
 
@@ -54,11 +59,28 @@ const DURATION_OPTIONS = [
   { label: '90 minutes', value: 90 },
 ]
 
+// Convert a UTC ISO string from the DB to 'YYYY-MM-DDTHH:MM' in local time
+function utcToLocalDatetimeString(isoString: string): string {
+  const d = new Date(isoString)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
   const { data: classTypes, isLoading: loadingTypes } = useClassTypes()
   const [instructors, setInstructors] = useState<Instructor[]>([])
   const [loadingInstructors, setLoadingInstructors] = useState(false)
+  const [calendarOpen, setCalendarOpen] = useState(false)
   const createClass = useCreateClass()
+
+  // Separate time state so the user can set the time before picking a date
+  const [timeValue, setTimeValue] = useState<string>(() => {
+    if (defaultValues?.scheduled_at) {
+      const d = new Date(defaultValues.scheduled_at)
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    }
+    return '09:00'
+  })
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -69,10 +91,35 @@ export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
       capacity: defaultValues?.capacity ?? 20,
       duration_minutes: defaultValues?.duration_minutes ?? 60,
       scheduled_at: defaultValues?.scheduled_at
-        ? new Date(defaultValues.scheduled_at).toISOString().slice(0, 16)
+        ? utcToLocalDatetimeString(defaultValues.scheduled_at)
         : '',
     },
   })
+
+  // Derive the picked date from the current form value for Calendar display
+  const scheduledAtValue = form.watch('scheduled_at')
+  const pickedDate: Date | undefined = scheduledAtValue
+    ? (() => {
+        const [y, m, d] = scheduledAtValue.slice(0, 10).split('-').map(Number)
+        return new Date(y, m - 1, d)
+      })()
+    : undefined
+
+  function handleDateSelect(date: Date | undefined) {
+    if (!date) return
+    const dateStr = format(date, 'yyyy-MM-dd')
+    form.setValue('scheduled_at', `${dateStr}T${timeValue}`, { shouldValidate: true })
+    setCalendarOpen(false)
+  }
+
+  function handleTimeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const time = e.target.value
+    setTimeValue(time)
+    const current = form.getValues('scheduled_at')
+    if (current) {
+      form.setValue('scheduled_at', `${current.slice(0, 10)}T${time}`, { shouldValidate: true })
+    }
+  }
 
   useEffect(() => {
     async function loadInstructors() {
@@ -93,13 +140,19 @@ export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
   }, [])
 
   async function onSubmit(data: FormData) {
+    // Construct Date from local-time parts to correctly convert to UTC
+    const [datePart, timePart] = data.scheduled_at.split('T')
+    const [year, month, day] = datePart.split('-').map(Number)
+    const [hours, minutes] = timePart.split(':').map(Number)
+    const scheduledDate = new Date(year, month - 1, day, hours, minutes, 0)
+
     const input: ClassInput = {
       class_type_id: data.class_type_id,
       instructor_id: data.instructor_id && data.instructor_id !== 'none' ? data.instructor_id : null,
       room: data.room || null,
       capacity: data.capacity,
       duration_minutes: data.duration_minutes,
-      scheduled_at: new Date(data.scheduled_at).toISOString(),
+      scheduled_at: scheduledDate.toISOString(),
     }
     await createClass.mutateAsync(input)
     onSuccess()
@@ -108,6 +161,7 @@ export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        {/* Class Type */}
         <FormField
           control={form.control}
           name="class_type_id"
@@ -143,6 +197,7 @@ export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
           )}
         />
 
+        {/* Instructor */}
         <FormField
           control={form.control}
           name="instructor_id"
@@ -173,6 +228,7 @@ export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
           )}
         />
 
+        {/* Room + Capacity */}
         <div className="grid grid-cols-2 gap-4">
           <FormField
             control={form.control}
@@ -187,7 +243,6 @@ export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
               </FormItem>
             )}
           />
-
           <FormField
             control={form.control}
             name="capacity"
@@ -203,49 +258,83 @@ export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="duration_minutes"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Duration</FormLabel>
-                <Select
-                  onValueChange={(v) => field.onChange(parseInt(v))}
-                  value={String(field.value)}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select duration" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {DURATION_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={String(opt.value)}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="scheduled_at"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Date &amp; Time</FormLabel>
+        {/* Duration */}
+        <FormField
+          control={form.control}
+          name="duration_minutes"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Duration</FormLabel>
+              <Select
+                onValueChange={(v) => field.onChange(parseInt(v))}
+                value={String(field.value)}
+              >
                 <FormControl>
-                  <Input type="datetime-local" {...field} />
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select duration" />
+                  </SelectTrigger>
                 </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+                <SelectContent>
+                  {DURATION_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={String(opt.value)}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Date & Time — full-width row with Calendar popover + time input */}
+        <FormField
+          control={form.control}
+          name="scheduled_at"
+          render={() => (
+            <FormItem>
+              <FormLabel>Date &amp; Time</FormLabel>
+              <div className="flex gap-2">
+                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={cn(
+                        'flex-1 justify-start text-left font-normal',
+                        !pickedDate && 'text-muted-foreground'
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                      {pickedDate ? format(pickedDate, 'd MMM yyyy') : 'Pick a date'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={pickedDate}
+                      onSelect={handleDateSelect}
+                      disabled={(date) => {
+                        const today = new Date()
+                        today.setHours(0, 0, 0, 0)
+                        return date < today
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                <Input
+                  type="time"
+                  className="w-32"
+                  value={timeValue}
+                  onChange={handleTimeChange}
+                />
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         <div className="flex justify-end gap-2 pt-2">
           <Button type="submit" disabled={createClass.isPending}>
