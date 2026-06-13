@@ -315,9 +315,20 @@ export default async function MemberDetailPage({ params }: PageProps) {
                   <span className="font-medium">{member.memberships.length}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">PT Sessions</span>
+                  <span className="text-muted-foreground">PT Sessions booked</span>
                   <span className="font-medium">{member.trainer_sessions.length}</span>
                 </div>
+                {member.memberships.some((m) => (m.pt_sessions_remaining ?? 0) > 0) && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">PT Credits remaining</span>
+                    <span className="font-medium text-indigo-600">
+                      {member.memberships.reduce(
+                        (sum, m) => sum + (m.pt_sessions_remaining ?? 0),
+                        0
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

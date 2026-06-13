@@ -32,6 +32,7 @@ const schema = z.object({
   type: z.enum(['monthly', 'annual', 'sessions', 'day_pass']),
   duration_days: z.coerce.number().min(1, 'Must be at least 1 day'),
   session_credits: z.coerce.number().optional(),
+  pt_sessions_included: z.coerce.number().min(0).default(0),
   price: z.coerce.number().min(0, 'Price must be 0 or more'),
   currency: z.string().default('IDR'),
   allow_freeze: z.boolean().default(false),
@@ -57,6 +58,7 @@ export function PackageForm({ package: pkg, onSuccess }: PackageFormProps) {
       type: pkg?.type ?? 'monthly',
       duration_days: pkg?.duration_days ?? 30,
       session_credits: pkg?.session_credits ?? undefined,
+      pt_sessions_included: pkg?.pt_sessions_included ?? 0,
       price: pkg?.price ?? 0,
       currency: pkg?.currency ?? 'IDR',
       allow_freeze: pkg?.allow_freeze ?? false,
@@ -73,6 +75,7 @@ export function PackageForm({ package: pkg, onSuccess }: PackageFormProps) {
       type: data.type,
       duration_days: data.duration_days,
       session_credits: data.type === 'sessions' ? data.session_credits : undefined,
+      pt_sessions_included: data.pt_sessions_included ?? 0,
       price: data.price,
       currency: data.currency,
       allow_freeze: data.allow_freeze,
@@ -202,6 +205,31 @@ export function PackageForm({ package: pkg, onSuccess }: PackageFormProps) {
                 )}
               />
             )}
+
+            {/* PT Sessions Included */}
+            <FormField
+              control={form.control}
+              name="pt_sessions_included"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>PT Sessions Included</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      {...field}
+                      value={field.value ?? 0}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    Number of personal trainer sessions bundled in this package (0 = none).
+                    Credits are tracked per active membership.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             {/* Allow Freeze */}
             <FormField

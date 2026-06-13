@@ -162,6 +162,11 @@ export function AssignPackageDialog({ memberId, onSuccess }: AssignPackageDialog
                   {selectedPackage.session_credits && (
                     <span>Sessions: {selectedPackage.session_credits} credits</span>
                   )}
+                  {(selectedPackage.pt_sessions_included ?? 0) > 0 && (
+                    <span className="text-indigo-600 font-medium">
+                      PT sessions: {selectedPackage.pt_sessions_included} included
+                    </span>
+                  )}
                   {selectedPackage.allow_freeze && (
                     <span>Freeze allowed: up to {selectedPackage.max_freeze_days ?? '?'} days</span>
                   )}

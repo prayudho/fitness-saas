@@ -15,6 +15,7 @@ export interface PackageInput {
   type: MembershipType
   duration_days: number
   session_credits?: number
+  pt_sessions_included?: number
   price: number
   currency?: string
   allow_freeze?: boolean
@@ -95,6 +96,7 @@ export async function createPackage(
         type: input.type,
         duration_days: input.duration_days,
         session_credits: input.session_credits ?? null,
+        pt_sessions_included: input.pt_sessions_included ?? 0,
         price: input.price,
         currency: input.currency ?? 'IDR',
         allow_freeze: input.allow_freeze ?? false,
@@ -124,6 +126,7 @@ export async function updatePackage(
     if (input.type !== undefined) updateData.type = input.type
     if (input.duration_days !== undefined) updateData.duration_days = input.duration_days
     if (input.session_credits !== undefined) updateData.session_credits = input.session_credits
+    if (input.pt_sessions_included !== undefined) updateData.pt_sessions_included = input.pt_sessions_included
     if (input.price !== undefined) updateData.price = input.price
     if (input.currency !== undefined) updateData.currency = input.currency
     if (input.allow_freeze !== undefined) updateData.allow_freeze = input.allow_freeze
