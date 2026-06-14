@@ -7,12 +7,12 @@ import { DataTable } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowLeft, Calendar, Phone, User } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/lib/hooks/use-auth'
 import { useTrainerSessions } from '@/lib/hooks/use-trainers'
+import { useTrainerActiveMembers } from '@/lib/hooks/use-pt-assignments'
 import type { TrainerSessionWithMember } from '@/lib/actions/trainers'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
@@ -66,10 +66,13 @@ interface PageProps {
 
 export default function TrainerClientDetailPage({ params }: PageProps) {
   const { user } = useAuth()
-  const { data: sessions = [], isLoading } = useTrainerSessions(user?.id ?? '', {})
+  const { data: clients = [], isLoading: clientsLoading } = useTrainerActiveMembers(user?.id ?? '')
+  const { data: sessions = [], isLoading: sessionsLoading } = useTrainerSessions(user?.id ?? '', {})
 
+  const client = clients.find((c) => c.member_id === params.id)
   const memberSessions = sessions.filter((s) => s.member_id === params.id)
-  const member = memberSessions[0]?.member
+
+  const isLoading = clientsLoading || sessionsLoading
 
   if (isLoading) {
     return (
@@ -80,7 +83,7 @@ export default function TrainerClientDetailPage({ params }: PageProps) {
     )
   }
 
-  const name = member?.full_name ?? 'Unknown Member'
+  const name = client?.member_name ?? memberSessions[0]?.member?.full_name ?? 'Unknown Member'
   const initials = name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
   const completed = memberSessions.filter((s) => s.status === 'completed').length
   const scheduled = memberSessions.filter((s) => s.status === 'scheduled').length
@@ -109,11 +112,11 @@ export default function TrainerClientDetailPage({ params }: PageProps) {
             columns={sessionColumns}
             isLoading={false}
             emptyTitle="No sessions yet"
-            emptyDescription="Sessions with this member will appear here."
+            emptyDescription="Sessions with this member will appear here once booked."
           />
         </div>
 
-        <div>
+        <div className="space-y-4">
           <Card>
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center gap-3 pb-4 border-b">
@@ -121,6 +124,11 @@ export default function TrainerClientDetailPage({ params }: PageProps) {
                   <AvatarFallback className="text-xl font-semibold">{initials}</AvatarFallback>
                 </Avatar>
                 <p className="font-semibold">{name}</p>
+                {client && (
+                  <Badge variant="outline" className="text-xs capitalize">
+                    {client.status === 'grace_period' ? 'Grace Period' : 'Active'}
+                  </Badge>
+                )}
               </div>
 
               <div className="pt-4 space-y-3 text-sm">
@@ -136,6 +144,33 @@ export default function TrainerClientDetailPage({ params }: PageProps) {
                   <span className="text-muted-foreground">Upcoming</span>
                   <span className="font-medium">{scheduled}</span>
                 </div>
+
+                {client && (
+                  <>
+                    <div className="border-t pt-3 space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Package</span>
+                        <span className="font-medium text-right max-w-[140px] truncate">{client.package_name || '—'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">PT Credits Left</span>
+                        <span className="font-medium">
+                          {client.pt_sessions_remaining ?? '—'}
+                        </span>
+                      </div>
+                      {client.pt_sessions_expires_at && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Credits Expire</span>
+                          <span className="font-medium">{formatDate(client.pt_sessions_expires_at)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Assigned</span>
+                        <span className="font-medium">{formatDate(client.assigned_at)}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
