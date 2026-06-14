@@ -135,10 +135,13 @@ async function fetchDashboardData(): Promise<DashboardData> {
 
   const activeMemberships = (membershipsResult.data ?? []) as unknown as MembershipWithPackage[]
 
-  // Fetch PT assignment for first active PT/bundled membership
+  // Fetch PT assignment for first active PT/bundled membership.
+  // package_category may be null on older rows — fall back to the linked package's value.
   let assignedTrainer: AssignedTrainer | null = null
   const ptMem = activeMemberships.find((m) => {
-    const cat = ((m as unknown as Record<string, unknown>).package_category as string | undefined) ?? ''
+    const row = m as unknown as Record<string, unknown>
+    const cat = (row.package_category as string | null)
+      ?? (m.membership_packages?.package_category ?? null)
     return cat === 'pt_sessions' || cat === 'bundled'
   })
 
@@ -440,7 +443,10 @@ function MembershipsSection({ memberships, assignedTrainer }: { memberships: Mem
   const cards: React.ReactNode[] = []
 
   for (const m of memberships) {
-    const category = ((m as unknown as Record<string, unknown>).package_category as string | undefined) ?? 'gym_access'
+    const row = m as unknown as Record<string, unknown>
+    const category = (row.package_category as string | null)
+      ?? (m.membership_packages?.package_category ?? null)
+      ?? 'gym_access'
 
     if (category === 'gym_access' || category === 'bundled') {
       cards.push(<GymAccessCard key={`gym-${m.id}`} membership={m} />)
