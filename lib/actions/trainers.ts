@@ -327,12 +327,23 @@ export async function createSession(input: {
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
 
+    // Auto-link to active PT assignment for this member+trainer (enables commission)
+    const { data: ptAssignment } = await supabase
+      .from('pt_assignments')
+      .select('id, membership_id')
+      .eq('brand_id', profile.brand_id)
+      .eq('member_id', input.member_id)
+      .eq('trainer_id', input.trainer_id)
+      .in('status', ['active', 'grace_period'])
+      .maybeSingle()
+
     const { data: session, error } = await supabase
       .from('trainer_sessions')
       .insert({
         brand_id: profile.brand_id,
         trainer_id: input.trainer_id,
         member_id: input.member_id,
+        pt_assignment_id: ptAssignment?.id ?? null,
         scheduled_at: input.scheduled_at,
         duration_minutes: input.duration_minutes ?? 60,
         session_fee: input.session_fee ?? null,
@@ -344,22 +355,44 @@ export async function createSession(input: {
 
     if (error) throw error
 
-    // Decrement sessions_remaining on active sessions-type membership
-    const { data: membership } = await supabase
-      .from('memberships')
-      .select('id, sessions_remaining, membership_packages(type)')
-      .eq('member_id', input.member_id)
-      .eq('brand_id', profile.brand_id)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    if (membership && (membership.membership_packages as { type?: string } | null)?.type === 'sessions' && (membership.sessions_remaining ?? 0) > 0) {
-      await supabase
+    // Decrement the appropriate credit counter
+    if (ptAssignment?.membership_id) {
+      // PT-assignment session: decrement pt_sessions_remaining on the linked PT membership
+      const { data: ptMem } = await supabase
         .from('memberships')
-        .update({ sessions_remaining: (membership.sessions_remaining ?? 1) - 1 })
-        .eq('id', membership.id)
+        .select('id, pt_sessions_remaining, pt_sessions_status')
+        .eq('id', ptAssignment.membership_id)
+        .maybeSingle()
+
+      if (ptMem && (ptMem.pt_sessions_remaining ?? 0) > 0) {
+        const newRemaining = (ptMem.pt_sessions_remaining ?? 1) - 1
+        await supabase
+          .from('memberships')
+          .update({
+            pt_sessions_remaining: newRemaining,
+            ...(newRemaining <= 0 ? { pt_sessions_status: 'exhausted' as never } : {}),
+          } as never)
+          .eq('id', ptMem.id)
+      }
+    } else {
+      // Non-PT session: decrement sessions_remaining on active sessions-type membership
+      const { data: membership } = await supabase
+        .from('memberships')
+        .select('id, sessions_remaining, membership_packages(type)')
+        .eq('member_id', input.member_id)
+        .eq('brand_id', profile.brand_id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      const pkgType = (membership?.membership_packages as { type?: string } | null)?.type
+      if (membership && pkgType === 'sessions' && (membership.sessions_remaining ?? 0) > 0) {
+        await supabase
+          .from('memberships')
+          .update({ sessions_remaining: (membership.sessions_remaining ?? 1) - 1 })
+          .eq('id', membership.id)
+      }
     }
 
     revalidatePath('/admin/trainers')
@@ -449,6 +482,34 @@ export async function updateSessionStatus(
               .update({ session_commission_amount: amount })
               .eq('id', id)
           }
+        }
+      }
+    }
+
+    // Restore PT session credit on cancellation or no-show
+    if ((status === 'cancelled' || status === 'no_show') && existing.pt_assignment_id) {
+      const { data: assignment } = await supabase
+        .from('pt_assignments')
+        .select('membership_id')
+        .eq('id', existing.pt_assignment_id)
+        .single()
+
+      if (assignment?.membership_id) {
+        const { data: mem } = await supabase
+          .from('memberships')
+          .select('id, pt_sessions_remaining, pt_sessions_status')
+          .eq('id', assignment.membership_id)
+          .single()
+
+        if (mem) {
+          const restored = (mem.pt_sessions_remaining ?? 0) + 1
+          await supabase
+            .from('memberships')
+            .update({
+              pt_sessions_remaining: restored,
+              ...(mem.pt_sessions_status === 'exhausted' ? { pt_sessions_status: 'active' as never } : {}),
+            } as never)
+            .eq('id', mem.id)
         }
       }
     }
@@ -679,10 +740,14 @@ export async function bookMemberPTSession(input: {
 
     if (insertErr) throw insertErr
 
-    // Decrement pt_sessions_remaining
+    // Decrement pt_sessions_remaining; auto-exhaust when last session is booked
+    const newRemaining = (membership.pt_sessions_remaining ?? 1) - 1
     await serviceClient
       .from('memberships')
-      .update({ pt_sessions_remaining: (membership.pt_sessions_remaining ?? 1) - 1 })
+      .update({
+        pt_sessions_remaining: newRemaining,
+        ...(newRemaining <= 0 ? { pt_sessions_status: 'exhausted' as never } : {}),
+      } as never)
       .eq('id', membership.id)
 
     revalidatePath('/member/pt-booking')
