@@ -15,9 +15,10 @@ interface PTAssignmentCardProps {
   memberId: string
   membershipId: string
   packageName: string
+  canAssignPT: boolean
 }
 
-export function PTAssignmentCard({ memberId, membershipId, packageName }: PTAssignmentCardProps) {
+export function PTAssignmentCard({ memberId, membershipId, packageName, canAssignPT }: PTAssignmentCardProps) {
   const { data: assignment, isLoading } = usePTAssignment(memberId, membershipId)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [sheetMode, setSheetMode] = useState<'assign' | 'reassign'>('assign')
@@ -43,7 +44,7 @@ export function PTAssignmentCard({ memberId, membershipId, packageName }: PTAssi
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-sm">Personal Trainer — {packageName}</CardTitle>
-          {!hasAssignment && (
+          {!hasAssignment && canAssignPT && (
             <Button
               size="sm"
               onClick={() => { setSheetMode('assign'); setSheetOpen(true) }}
@@ -57,7 +58,9 @@ export function PTAssignmentCard({ memberId, membershipId, packageName }: PTAssi
           {!hasAssignment ? (
             <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
               <User className="h-4 w-4" />
-              No trainer assigned to this membership yet.
+              {canAssignPT
+                ? 'No trainer assigned to this membership yet.'
+                : 'PT assignment is unavailable — membership is inactive or invoice is unpaid.'}
             </div>
           ) : (
             <div className="space-y-3">

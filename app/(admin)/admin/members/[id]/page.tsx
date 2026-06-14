@@ -227,22 +227,38 @@ export default async function MemberDetailPage({ params }: PageProps) {
             {/* PT Sessions Tab */}
             <TabsContent value="pt-sessions">
               {/* PT Assignment cards — one per PT/bundled membership */}
-              {member.memberships
-                .filter((m) => {
-                  const cat = (m as { package_category?: string }).package_category
-                  return cat === 'pt_sessions' || cat === 'bundled'
-                })
-                .map((m) => (
-                  <div key={m.id} className="mb-4">
-                    <PTAssignmentCard
-                      memberId={params.id}
-                      membershipId={m.id}
-                      packageName={
-                        (m.membership_packages as { name: string } | null)?.name ?? 'PT Membership'
-                      }
-                    />
-                  </div>
-                ))}
+              {(() => {
+                // Membership IDs that have at least one paid invoice
+                const paidMembershipIds = new Set(
+                  member.invoices
+                    .filter((inv) => inv.status === 'paid')
+                    .map((inv) => (inv as { membership_id?: string | null }).membership_id)
+                    .filter(Boolean) as string[]
+                )
+
+                return member.memberships
+                  .filter((m) => {
+                    const cat = (m as { package_category?: string }).package_category
+                    return cat === 'pt_sessions' || cat === 'bundled'
+                  })
+                  .map((m) => {
+                    const canAssignPT =
+                      (m as { pt_sessions_status?: string }).pt_sessions_status === 'active' &&
+                      paidMembershipIds.has(m.id)
+                    return (
+                      <div key={m.id} className="mb-4">
+                        <PTAssignmentCard
+                          memberId={params.id}
+                          membershipId={m.id}
+                          packageName={
+                            (m.membership_packages as { name: string } | null)?.name ?? 'PT Membership'
+                          }
+                          canAssignPT={canAssignPT}
+                        />
+                      </div>
+                    )
+                  })
+              })()}
 
               <Card>
                 <CardHeader>
