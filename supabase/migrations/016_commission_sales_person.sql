@@ -12,8 +12,9 @@
 -- =============================================================================
 
 -- 1. Track sales person on assignment
+-- References auth.users(id) — profiles.id is no longer the PK after migration 008
 ALTER TABLE public.pt_assignments
-  ADD COLUMN IF NOT EXISTS sales_person_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS sales_person_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
 
 COMMENT ON COLUMN public.pt_assignments.sales_person_id IS
   'The staff member or trainer who sold this PT package. If NULL, defaults to the assigned trainer.';
@@ -23,11 +24,12 @@ ALTER TABLE public.pt_commission_payouts
   ALTER COLUMN trainer_id DROP NOT NULL;
 
 -- 2b. Add sales_person_id to pt_commission_payouts
+-- References auth.users(id) — profiles.id is no longer the PK after migration 008
 ALTER TABLE public.pt_commission_payouts
-  ADD COLUMN IF NOT EXISTS sales_person_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS sales_person_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
 
 COMMENT ON COLUMN public.pt_commission_payouts.sales_person_id IS
-  'Profile ID of the person who receives the sales commission (trainer or staff).';
+  'User ID of the person who receives the sales commission (trainer or staff).';
 
 -- 3. Backfill: for existing sales-type payouts, the sales person = the trainer
 UPDATE public.pt_commission_payouts
