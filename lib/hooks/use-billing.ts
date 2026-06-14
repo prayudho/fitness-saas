@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   getInvoices,
+  getInvoiceStats,
   getMemberInvoices,
   createInvoice,
   recordPayment,
@@ -11,6 +12,18 @@ import {
   processRefund,
   cancelPendingPackage,
 } from '@/lib/actions/billing'
+
+// M1: full-dataset stats (not limited to current page)
+export function useInvoiceStats() {
+  return useQuery({
+    queryKey: ['invoice-stats'],
+    queryFn: async () => {
+      const result = await getInvoiceStats()
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+  })
+}
 
 export function useInvoices(filters?: { status?: string; page?: number; limit?: number }) {
   return useQuery({
@@ -65,6 +78,7 @@ export function useRecordPayment() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['invoice-stats'] })
       qc.invalidateQueries({ queryKey: ['member-invoices'] })
       toast.success('Payment recorded successfully')
     },
@@ -92,6 +106,7 @@ export function useProcessRefund() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['invoice-stats'] })
       toast.success('Invoice refunded successfully')
     },
     onError: (e: Error) => toast.error(e.message),
@@ -107,8 +122,9 @@ export function useCancelPendingPackage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['invoice-stats'] })
       qc.invalidateQueries({ queryKey: ['members'] })
-      toast.success('Package cancelled and invoice deleted')
+      toast.success('Package cancelled successfully')
     },
     onError: (e: Error) => toast.error(e.message),
   })

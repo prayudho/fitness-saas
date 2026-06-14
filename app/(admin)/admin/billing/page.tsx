@@ -9,6 +9,13 @@ import { PageHeader } from '@/components/shared/page-header'
 import { DataTable } from '@/components/shared/data-table'
 import { Button } from '@/components/ui/button'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -36,6 +43,7 @@ import { RecordPaymentDialog } from '@/components/billing/record-payment-dialog'
 import { getInvoiceColumns } from '@/components/billing/invoice-columns'
 import {
   useInvoices,
+  useInvoiceStats,
   useCreateInvoice,
   useProcessRefund,
   useGetMidtransToken,
@@ -49,49 +57,121 @@ import type { InvoiceWithDetails } from '@/lib/actions/billing'
 import { toast } from 'sonner'
 
 const createInvoiceSchema = z.object({
-  member_id: z.string().min(1, 'Select a member'),
+  member_id:    z.string().min(1, 'Select a member'),
   membership_id: z.string().optional(),
-  amount: z.coerce.number().positive('Amount must be positive'),
-  currency: z.string().default('IDR'),
-  notes: z.string().optional(),
+  amount:       z.coerce.number().positive('Amount must be positive'),
+  currency:     z.string().default('IDR'),
+  notes:        z.string().optional(),
+})
+
+const refundSchema = z.object({
+  reason: z.string().min(3, 'Please provide a reason').max(500, 'Max 500 characters'),
 })
 
 type CreateInvoiceFormData = z.infer<typeof createInvoiceSchema>
+type RefundFormData        = z.infer<typeof refundSchema>
+
+// M4: proper refund dialog instead of window.prompt
+function RefundDialog({
+  invoiceId,
+  open,
+  onOpenChange,
+}: {
+  invoiceId: string | null
+  open: boolean
+  onOpenChange: (v: boolean) => void
+}) {
+  const refundMutation = useProcessRefund()
+
+  const form = useForm<RefundFormData>({
+    resolver: zodResolver(refundSchema),
+    defaultValues: { reason: '' },
+  })
+
+  React.useEffect(() => {
+    if (!open) form.reset()
+  }, [open, form])
+
+  async function onSubmit(data: RefundFormData) {
+    if (!invoiceId) return
+    await refundMutation.mutateAsync({ invoiceId, reason: data.reason })
+    onOpenChange(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Process Refund</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="reason"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Refund Reason</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Describe the reason for this refund..."
+                      className="resize-none"
+                      rows={3}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={refundMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={refundMutation.isPending}
+              >
+                {refundMutation.isPending ? 'Processing…' : 'Confirm Refund'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 export default function AdminBillingPage() {
-  const [statusFilter, setStatusFilter] = React.useState<string>('all')
-  const [sheetOpen, setSheetOpen] = React.useState(false)
+  const [statusFilter, setStatusFilter]         = React.useState<string>('all')
+  const [sheetOpen, setSheetOpen]               = React.useState(false)
   const [recordPaymentInvoice, setRecordPaymentInvoice] = React.useState<InvoiceWithDetails | null>(null)
+  const [refundInvoiceId, setRefundInvoiceId]   = React.useState<string | null>(null)
+  const [refundDialogOpen, setRefundDialogOpen] = React.useState(false)
 
-  const { data, isLoading } = useInvoices({ status: statusFilter })
-  const { data: membersData } = useMembers()
-  const { data: brandSettings } = useQuery({
+  const { data, isLoading }       = useInvoices({ status: statusFilter })
+  const { data: statsData, isLoading: statsLoading } = useInvoiceStats()  // M1: real stats
+  const { data: membersData }     = useMembers()
+  const { data: brandSettings }   = useQuery({
     queryKey: ['brand-settings'],
     queryFn: async () => {
       const r = await getBrandSettings()
       return r.data
     },
   })
-  const createMutation = useCreateInvoice()
-  const refundMutation = useProcessRefund()
+  const createMutation   = useCreateInvoice()
   const midtransMutation = useGetMidtransToken()
-  const cancelMutation = useCancelPendingPackage()
+  const cancelMutation   = useCancelPendingPackage()
   const refundWindowDays = (brandSettings as { refund_window_days?: number } | null)?.refund_window_days ?? 1
 
   const invoices = data?.data ?? []
-  const members = membersData?.data ?? []
-
-  // Stats
-  const now = new Date()
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-
-  const allPaidInvoices = invoices.filter((inv) => inv.status === 'paid')
-  const thisMonthPaid = allPaidInvoices.filter((inv) =>
-    inv.paid_at ? new Date(inv.paid_at) >= thisMonthStart : false
-  )
-  const totalThisMonth = thisMonthPaid.reduce((sum, inv) => sum + inv.amount, 0)
-  const pendingCount = invoices.filter((inv) => inv.status === 'pending').length
-  const paidCount = allPaidInvoices.length
+  const members  = membersData?.data ?? []
 
   const form = useForm<CreateInvoiceFormData>({
     resolver: zodResolver(createInvoiceSchema),
@@ -99,16 +179,16 @@ export default function AdminBillingPage() {
   })
 
   const selectedMemberId = form.watch('member_id')
-  const selectedMember = members.find((m) => m.id === selectedMemberId)
+  const selectedMember   = members.find((m) => m.id === selectedMemberId)
   const memberMemberships = selectedMember?.memberships ?? []
 
   async function onSubmit(data: CreateInvoiceFormData) {
     await createMutation.mutateAsync({
-      member_id: data.member_id,
+      member_id:     data.member_id,
       membership_id: data.membership_id || undefined,
-      amount: data.amount,
-      currency: data.currency,
-      notes: data.notes || undefined,
+      amount:        data.amount,
+      currency:      data.currency,
+      notes:         data.notes || undefined,
     })
     form.reset()
     setSheetOpen(false)
@@ -123,10 +203,9 @@ export default function AdminBillingPage() {
     }
   }
 
-  async function handleRefund(invoiceId: string) {
-    const reason = window.prompt('Enter refund reason:')
-    if (!reason) return
-    await refundMutation.mutateAsync({ invoiceId, reason })
+  function handleRefund(invoiceId: string) {
+    setRefundInvoiceId(invoiceId)
+    setRefundDialogOpen(true)
   }
 
   async function handleCancel(invoiceId: string) {
@@ -141,6 +220,8 @@ export default function AdminBillingPage() {
     refundWindowDays,
   })
 
+  const currency = statsData?.currency ?? 'IDR'
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -154,24 +235,26 @@ export default function AdminBillingPage() {
         }
       />
 
-      {/* Stats */}
-      {isLoading ? (
+      {/* Stats — M1: sourced from full-dataset query, not the current page */}
+      {statsLoading ? (
         <StatsSkeleton />
       ) : (
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="rounded-lg border bg-card p-6 shadow-sm">
             <p className="text-sm font-medium text-muted-foreground">Revenue This Month</p>
-            <p className="mt-2 text-3xl font-bold">{formatCurrency(totalThisMonth)}</p>
+            <p className="mt-2 text-3xl font-bold">
+              {formatCurrency(statsData?.revenueThisMonth ?? 0, currency)}
+            </p>
             <p className="mt-1 text-xs text-muted-foreground">Paid invoices this month</p>
           </div>
           <div className="rounded-lg border bg-card p-6 shadow-sm">
             <p className="text-sm font-medium text-muted-foreground">Pending</p>
-            <p className="mt-2 text-3xl font-bold">{pendingCount}</p>
+            <p className="mt-2 text-3xl font-bold">{statsData?.pendingCount ?? 0}</p>
             <p className="mt-1 text-xs text-muted-foreground">Awaiting payment</p>
           </div>
           <div className="rounded-lg border bg-card p-6 shadow-sm">
             <p className="text-sm font-medium text-muted-foreground">Paid</p>
-            <p className="mt-2 text-3xl font-bold">{paidCount}</p>
+            <p className="mt-2 text-3xl font-bold">{statsData?.paidCount ?? 0}</p>
             <p className="mt-1 text-xs text-muted-foreground">Completed payments</p>
           </div>
         </div>
@@ -189,6 +272,7 @@ export default function AdminBillingPage() {
             <SelectItem value="paid">Paid</SelectItem>
             <SelectItem value="failed">Failed</SelectItem>
             <SelectItem value="refunded">Refunded</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -214,6 +298,16 @@ export default function AdminBillingPage() {
           onOpenChange={(open) => { if (!open) setRecordPaymentInvoice(null) }}
         />
       )}
+
+      {/* Refund Dialog — M4: replaces window.prompt */}
+      <RefundDialog
+        invoiceId={refundInvoiceId}
+        open={refundDialogOpen}
+        onOpenChange={(open) => {
+          setRefundDialogOpen(open)
+          if (!open) setRefundInvoiceId(null)
+        }}
+      />
 
       {/* Create Invoice Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

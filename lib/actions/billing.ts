@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getAuthedProfile } from '@/lib/actions/utils'
+import { activateMembershipForInvoice } from '@/lib/billing/shared'
 import type { Database } from '@/types/database'
 
 type Row<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
@@ -20,6 +21,15 @@ export type InvoiceWithDetails = InvoiceRow & {
       })
     | null
 }
+
+export type InvoiceStats = {
+  revenueThisMonth: number
+  pendingCount: number
+  paidCount: number
+  currency: string
+}
+
+// ── getInvoices ──────────────────────────────────────────────────────────────
 
 export async function getInvoices(filters?: {
   status?: string
@@ -50,14 +60,47 @@ export async function getInvoices(filters?: {
     }
 
     const { data: rawData, error, count } = await query
-
     if (error) return { data: [], count: 0, error: error.message }
 
     return { data: (rawData ?? []) as unknown as InvoiceWithDetails[], count: count ?? 0 }
   } catch (e) {
-    return { data: [], count: 0, error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
+    return { data: [], count: 0, error: e instanceof Error ? e.message : 'An error occurred' }
   }
 }
+
+// M1: separate, full-dataset stats query (not limited to current page)
+export async function getInvoiceStats(): Promise<{ data?: InvoiceStats; error?: string }> {
+  try {
+    const supabase = createClient()
+    const { profile } = await getAuthedProfile(supabase)
+    if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
+
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+
+    const { data: rawRows, error } = await supabase
+      .from('invoices')
+      .select('status, amount, paid_at, currency')
+      .eq('brand_id', brandId)
+
+    if (error) return { error: error.message }
+
+    const rows = (rawRows ?? []) as { status: string; amount: number; paid_at: string | null; currency: string }[]
+    const currency = rows.find((r) => r.currency)?.currency ?? 'IDR'
+    const revenueThisMonth = rows
+      .filter((r) => r.status === 'paid' && r.paid_at && r.paid_at >= monthStart)
+      .reduce((sum, r) => sum + r.amount, 0)
+    const pendingCount = rows.filter((r) => r.status === 'pending').length
+    const paidCount    = rows.filter((r) => r.status === 'paid').length
+
+    return { data: { revenueThisMonth, pendingCount, paidCount, currency } }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'An error occurred' }
+  }
+}
+
+// ── getInvoice ───────────────────────────────────────────────────────────────
 
 export async function getInvoice(id: string): Promise<{ data?: InvoiceWithDetails; error?: string }> {
   try {
@@ -75,12 +118,13 @@ export async function getInvoice(id: string): Promise<{ data?: InvoiceWithDetail
       .single()
 
     if (error) return { error: error.message }
-
     return { data: rawData as unknown as InvoiceWithDetails }
   } catch (e) {
-    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
+    return { error: e instanceof Error ? e.message : 'An error occurred' }
   }
 }
+
+// ── createInvoice ────────────────────────────────────────────────────────────
 
 export async function createInvoice(input: {
   member_id: string
@@ -93,18 +137,34 @@ export async function createInvoice(input: {
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
+
+    // L5: guard against duplicate pending invoices for the same membership
+    if (input.membership_id) {
+      const { data: existing } = await supabase
+        .from('invoices')
+        .select('id')
+        .eq('membership_id', input.membership_id)
+        .eq('brand_id', brandId)
+        .eq('status', 'pending')
+        .maybeSingle()
+
+      if (existing) {
+        return { error: 'A pending invoice already exists for this membership. Confirm or cancel it first.' }
+      }
+    }
 
     const { data, error } = await supabase
       .from('invoices')
       .insert({
-        brand_id: profile.brand_id,
-        member_id: input.member_id,
+        brand_id:      brandId,
+        member_id:     input.member_id,
         membership_id: input.membership_id ?? null,
-        amount: input.amount,
-        currency: input.currency ?? 'IDR',
-        status: 'pending',
-        notes: input.notes ?? null,
-      })
+        amount:        input.amount,
+        currency:      input.currency ?? 'IDR',
+        status:        'pending' as Database['public']['Enums']['invoice_status'],
+        notes:         input.notes ?? null,
+      } as never)
       .select()
       .single()
 
@@ -113,9 +173,11 @@ export async function createInvoice(input: {
     revalidatePath('/admin/billing')
     return { data: data ?? undefined }
   } catch (e) {
-    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
+    return { error: e instanceof Error ? e.message : 'An error occurred' }
   }
 }
+
+// ── recordPayment ────────────────────────────────────────────────────────────
 
 export async function recordPayment(
   invoiceId: string,
@@ -129,19 +191,18 @@ export async function recordPayment(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    // Fetch invoice + linked membership in one query
     const { data: invoiceRaw, error: fetchErr } = await supabase
       .from('invoices')
       .select('id, status, membership_id, member_id')
       .eq('id', invoiceId)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .single()
 
     if (fetchErr || !invoiceRaw) return { error: fetchErr?.message ?? 'Invoice not found' }
-    if (invoiceRaw.status !== 'pending') return { error: 'Only pending invoices can be confirmed' }
+    if ((invoiceRaw as { status?: string }).status !== 'pending') return { error: 'Only pending invoices can be confirmed' }
 
-    // Mark invoice paid
     const { error: payErr } = await supabase
       .from('invoices')
       .update({
@@ -152,87 +213,22 @@ export async function recordPayment(
         ...(input.notes !== undefined && { notes: input.notes }),
       } as never)
       .eq('id', invoiceId)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
 
     if (payErr) return { error: payErr.message }
 
-    // Activate the linked membership (if it exists and is pending payment)
-    if (invoiceRaw.membership_id) {
-      const { data: memRaw } = await supabase
-        .from('memberships')
-        .select('id, status, package_id, member_id')
-        .eq('id', invoiceRaw.membership_id)
-        .eq('brand_id', profile.brand_id)
-        .single()
-
-      const mem = memRaw as (typeof memRaw & { package_category?: string }) | null
-
-      if (mem && (mem.status as string) === 'pending_payment') {
-        // For pt_sessions packages: check if an active PT membership already exists → stack onto it
-        const { data: pkgRaw } = await supabase
-          .from('membership_packages')
-          .select('package_category, pt_session_credits, pt_session_expiry_days')
-          .eq('id', mem.package_id)
-          .single()
-
-        const category = (pkgRaw as { package_category?: string } | null)?.package_category
-
-        if (category === 'pt_sessions' && pkgRaw) {
-          const pkg = pkgRaw as { pt_session_credits: number | null; pt_session_expiry_days: number | null }
-
-          const { data: existingPT } = await supabase
-            .from('memberships')
-            .select('id, pt_sessions_remaining, pt_sessions_expires_at')
-            .eq('brand_id', profile.brand_id)
-            .eq('member_id', mem.member_id)
-            .eq('pt_sessions_status', 'active')
-            .eq('status', 'active')
-            .neq('id', mem.id)
-            .not('pt_sessions_remaining', 'is', null)
-            .order('pt_sessions_expires_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
-          if (existingPT) {
-            // Stack credits onto existing membership
-            const addedCredits = pkg.pt_session_credits ?? 0
-            const newCredits   = (existingPT.pt_sessions_remaining ?? 0) + addedCredits
-
-            const existingExpMs  = existingPT.pt_sessions_expires_at ? new Date(existingPT.pt_sessions_expires_at).getTime() : 0
-            const newExpMs       = pkg.pt_session_expiry_days ? new Date().getTime() + pkg.pt_session_expiry_days * 86400000 : 0
-            const extendedExpiry = newExpMs > existingExpMs
-              ? new Date(newExpMs).toISOString()
-              : existingPT.pt_sessions_expires_at
-
-            await supabase.from('memberships').update({
-              pt_sessions_remaining:  newCredits,
-              pt_sessions_expires_at: extendedExpiry,
-              expires_at:             extendedExpiry,
-            } as never).eq('id', existingPT.id)
-
-            // Cancel the now-absorbed pending membership
-            await supabase.from('memberships')
-              .update({ status: 'cancelled' as never })
-              .eq('id', mem.id)
-
-            // Re-link the invoice to the existing (stacked-onto) membership
-            await supabase.from('invoices')
-              .update({ membership_id: existingPT.id } as never)
-              .eq('id', invoiceId)
-
-            revalidatePath('/admin/billing')
-            revalidatePath('/admin/members')
-            revalidatePath(`/admin/members/${mem.member_id}`)
-            return {}
-          }
+    // Activate the linked membership via shared helper (also used by Midtrans webhook)
+    const inv = invoiceRaw as { id: string; status: string; membership_id: string | null; member_id: string }
+    if (inv.membership_id) {
+      await activateMembershipForInvoice(
+        supabase as unknown as Parameters<typeof activateMembershipForInvoice>[0],
+        {
+          id:            inv.id,
+          membership_id: inv.membership_id,
+          member_id:     inv.member_id,
+          brand_id:      brandId,
         }
-
-        // Normal activation
-        await supabase.from('memberships')
-          .update({ status: 'active' as never })
-          .eq('id', mem.id)
-          .eq('brand_id', profile.brand_id)
-      }
+      )
     }
 
     revalidatePath('/admin/billing')
@@ -244,6 +240,8 @@ export async function recordPayment(
   }
 }
 
+// ── getMidtransSnapToken ─────────────────────────────────────────────────────
+
 export async function getMidtransSnapToken(
   invoiceId: string
 ): Promise<{ data?: { snap_token: string; redirect_url: string }; error?: string }> {
@@ -251,26 +249,39 @@ export async function getMidtransSnapToken(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
     const serverKey = process.env.MIDTRANS_SERVER_KEY
     if (!serverKey) {
       return { error: 'Midtrans not configured. Set MIDTRANS_SERVER_KEY in environment variables.' }
     }
 
-    const { data: invoice, error: invoiceError } = await supabase
+    const { data: invoiceRaw, error: invoiceError } = await supabase
       .from('invoices')
       .select(`*, profiles!invoices_member_brand_fkey(id, full_name, avatar_url)`)
       .eq('id', invoiceId)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .single()
 
-    if (invoiceError || !invoice) return { error: invoiceError?.message ?? 'Invoice not found' }
+    if (invoiceError || !invoiceRaw) return { error: invoiceError?.message ?? 'Invoice not found' }
+
+    const invoice = invoiceRaw as InvoiceWithDetails & { amount: number }
+
+    // H5: only create a Snap token for invoices that still need payment
+    if ((invoice.status as string) !== 'pending') {
+      return { error: `Invoice is already ${invoice.status as string} — no payment needed.` }
+    }
 
     const memberProfile = invoice.profiles as Pick<ProfileRow, 'id' | 'full_name' | 'avatar_url'> | null
-
     const auth = Buffer.from(serverKey + ':').toString('base64')
 
-    const response = await fetch('https://app.sandbox.midtrans.com/snap/v1/transactions', {
+    // H7: use production or sandbox endpoint based on env var
+    const isProduction = process.env.MIDTRANS_IS_PRODUCTION === 'true'
+    const snapUrl = isProduction
+      ? 'https://app.midtrans.com/snap/v1/transactions'
+      : 'https://app.sandbox.midtrans.com/snap/v1/transactions'
+
+    const response = await fetch(snapUrl, {
       method: 'POST',
       headers: {
         Authorization: 'Basic ' + auth,
@@ -278,7 +289,7 @@ export async function getMidtransSnapToken(
       },
       body: JSON.stringify({
         transaction_details: {
-          order_id: invoiceId,
+          order_id:     invoiceId,
           gross_amount: Math.round(invoice.amount),
         },
         customer_details: {
@@ -293,12 +304,13 @@ export async function getMidtransSnapToken(
     }
 
     const result = await response.json() as { token: string; redirect_url: string }
-
     return { data: { snap_token: result.token, redirect_url: result.redirect_url } }
   } catch (e) {
-    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
+    return { error: e instanceof Error ? e.message : 'An error occurred' }
   }
 }
+
+// ── processRefund ────────────────────────────────────────────────────────────
 
 export async function processRefund(
   invoiceId: string,
@@ -308,111 +320,134 @@ export async function processRefund(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    const { data: existing, error: fetchError } = await supabase
+    // M9: refunds are admin-only
+    if (profile.role !== 'admin') return { error: 'Admin access required to process refunds' }
+
+    // M3: cap reason length
+    const trimmedReason = reason.trim().slice(0, 500)
+    if (!trimmedReason) return { error: 'Refund reason is required' }
+
+    const { data: existingRaw, error: fetchError } = await supabase
       .from('invoices')
-      .select('notes, status, membership_id, paid_at')
+      .select('notes, status, membership_id, member_id, paid_at, pt_credits_applied')
       .eq('id', invoiceId)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .single()
 
-    if (fetchError || !existing) return { error: fetchError?.message ?? 'Invoice not found' }
+    if (fetchError || !existingRaw) return { error: fetchError?.message ?? 'Invoice not found' }
+    const existing = existingRaw as {
+      notes: string | null
+      status: string
+      membership_id: string | null
+      member_id: string
+      paid_at: string | null
+      pt_credits_applied: number | null
+    }
     if (existing.status !== 'paid') return { error: 'Only paid invoices can be refunded' }
 
     // Enforce per-brand refund window
     const { data: brand } = await supabase
       .from('brands')
       .select('refund_window_days')
-      .eq('id', profile.brand_id)
+      .eq('id', brandId)
       .single()
 
     const windowDays = (brand as { refund_window_days?: number } | null)?.refund_window_days ?? 1
-    const paidAt = existing.paid_at ? new Date(existing.paid_at).getTime() : 0
-    const windowMs = windowDays * 24 * 60 * 60 * 1000
-    if (Date.now() - paidAt > windowMs) {
-      return { error: `Refund window has expired (${windowDays} day${windowDays !== 1 ? 's' : ''} after payment)` }
+
+    // M5: if paid_at is null, refund is always allowed (data integrity gap — don't block the operation)
+    if (existing.paid_at) {
+      const windowMs = windowDays * 24 * 60 * 60 * 1000
+      if (Date.now() - new Date(existing.paid_at).getTime() > windowMs) {
+        return { error: `Refund window has expired (${windowDays} day${windowDays !== 1 ? 's' : ''} after payment)` }
+      }
     }
 
     const updatedNotes = existing.notes
-      ? `${existing.notes}\nRefund reason: ${reason}`
-      : `Refund reason: ${reason}`
+      ? `${existing.notes}\nRefund reason: ${trimmedReason}`
+      : `Refund reason: ${trimmedReason}`
 
     const { error } = await supabase
       .from('invoices')
-      .update({ status: 'refunded', notes: updatedNotes })
+      .update({
+        status:      'refunded',
+        refunded_at: new Date().toISOString(),
+        notes:       updatedNotes,
+      } as never)
       .eq('id', invoiceId)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
 
     if (error) return { error: error.message }
 
-    // Auto-cancel linked membership
-    if ((existing as { membership_id?: string | null }).membership_id) {
-      await supabase
+    // H6: reverse the linked membership correctly
+    if (existing.membership_id) {
+      const memId = existing.membership_id  // narrow to string for Supabase TS
+      const { data: memRaw } = await supabase
         .from('memberships')
-        .update({ status: 'cancelled' as never })
-        .eq('id', (existing as { membership_id: string }).membership_id)
-        .eq('brand_id', profile.brand_id)
-    }
-
-    revalidatePath('/admin/billing')
-    revalidatePath('/admin/members')
-    return {}
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : 'An error occurred' }
-  }
-}
-
-export async function cancelPendingPackage(
-  invoiceId: string
-): Promise<{ error?: string }> {
-  try {
-    const supabase = createClient()
-    const { profile } = await getAuthedProfile(supabase)
-    if (!profile.brand_id) return { error: 'No brand context' }
-
-    // Fetch the invoice and verify it is still pending
-    const { data: inv } = await supabase
-      .from('invoices')
-      .select('id, status, membership_id')
-      .eq('id', invoiceId)
-      .eq('brand_id', profile.brand_id)
-      .single()
-
-    if (!inv) return { error: 'Invoice not found' }
-    if (inv.status !== 'pending') return { error: 'Only pending invoices can be cancelled' }
-
-    // Hard-delete the invoice
-    const { error: invErr } = await supabase
-      .from('invoices')
-      .delete()
-      .eq('id', invoiceId)
-      .eq('brand_id', profile.brand_id)
-
-    if (invErr) return { error: invErr.message }
-
-    // If the linked membership is pending_payment, delete it + any remaining pending invoices
-    if (inv.membership_id) {
-      const { data: mem } = await supabase
-        .from('memberships')
-        .select('id, status')
-        .eq('id', inv.membership_id)
-        .eq('brand_id', profile.brand_id)
+        .select('id, status, package_id, pt_sessions_remaining')
+        .eq('id', memId)
+        .eq('brand_id', brandId)
         .maybeSingle()
 
-      if (mem && (mem.status as string) === 'pending_payment') {
-        // Delete any other pending invoices linked to the same membership
-        await supabase
-          .from('invoices')
-          .delete()
-          .eq('membership_id', mem.id)
-          .eq('brand_id', profile.brand_id)
-          .eq('status', 'pending')
+      const mem = memRaw as { id: string; status: string; package_id: string | null; pt_sessions_remaining: number | null } | null
 
-        await supabase
-          .from('memberships')
-          .delete()
-          .eq('id', mem.id)
-          .eq('brand_id', profile.brand_id)
+      if (mem && mem.status === 'active') {
+        const pkgId = mem.package_id
+        if (pkgId) {
+          const { data: pkgRaw } = await supabase
+            .from('membership_packages')
+            .select('package_category')
+            .eq('id', pkgId)
+            .single()
+
+          const category = (pkgRaw as { package_category?: string } | null)?.package_category
+
+          if (category === 'pt_sessions' || category === 'bundled') {
+            // Subtract only the credits this invoice added (stored in pt_credits_applied).
+            // Fall back to the package's full credit count for non-stacked invoices.
+            const { data: fullPkgRaw } = await supabase
+              .from('membership_packages')
+              .select('pt_session_credits')
+              .eq('id', pkgId)
+              .single()
+
+            const creditsToReverse =
+              existing.pt_credits_applied ??
+              (fullPkgRaw as { pt_session_credits?: number | null } | null)?.pt_session_credits ??
+              0
+
+            const newRemaining = Math.max(0, (mem.pt_sessions_remaining ?? 0) - creditsToReverse)
+
+            if (newRemaining <= 0) {
+              await supabase
+                .from('memberships')
+                .update({ status: 'cancelled' as never, pt_sessions_remaining: 0 } as never)
+                .eq('id', mem.id)
+                .eq('brand_id', brandId)
+            } else {
+              await supabase
+                .from('memberships')
+                .update({ pt_sessions_remaining: newRemaining } as never)
+                .eq('id', mem.id)
+                .eq('brand_id', brandId)
+            }
+          } else {
+            // Gym access / non-PT membership: cancel it
+            await supabase
+              .from('memberships')
+              .update({ status: 'cancelled' } as never)
+              .eq('id', mem.id)
+              .eq('brand_id', brandId)
+          }
+        } else {
+          // No package linked — just cancel the membership
+          await supabase
+            .from('memberships')
+            .update({ status: 'cancelled' } as never)
+            .eq('id', mem.id)
+            .eq('brand_id', brandId)
+        }
       }
     }
 
@@ -424,6 +459,78 @@ export async function cancelPendingPackage(
   }
 }
 
+// ── cancelPendingPackage ─────────────────────────────────────────────────────
+
+export async function cancelPendingPackage(
+  invoiceId: string
+): Promise<{ error?: string }> {
+  try {
+    const supabase = createClient()
+    const { profile } = await getAuthedProfile(supabase)
+    if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
+
+    // M9: cancelling a package assignment is admin-only
+    if (profile.role !== 'admin') return { error: 'Admin access required to cancel packages' }
+
+    const { data: invRaw } = await supabase
+      .from('invoices')
+      .select('id, status, membership_id')
+      .eq('id', invoiceId)
+      .eq('brand_id', brandId)
+      .single()
+
+    if (!invRaw) return { error: 'Invoice not found' }
+    const inv = invRaw as { id: string; status: string; membership_id: string | null }
+    if (inv.status !== 'pending') return { error: 'Only pending invoices can be cancelled' }
+
+    // H4: soft-delete — mark cancelled instead of deleting rows (preserves audit trail)
+    const { error: invErr } = await supabase
+      .from('invoices')
+      .update({ status: 'cancelled' } as never)
+      .eq('id', invoiceId)
+      .eq('brand_id', brandId)
+
+    if (invErr) return { error: invErr.message }
+
+    if (inv.membership_id) {
+      const memId = inv.membership_id  // narrow to string for Supabase TS
+      const { data: memRaw } = await supabase
+        .from('memberships')
+        .select('id, status')
+        .eq('id', memId)
+        .eq('brand_id', brandId)
+        .maybeSingle()
+
+      const mem = memRaw as { id: string; status: string } | null
+
+      if (mem && mem.status === 'pending_payment') {
+        // Cancel the membership and any other pending invoices linked to it
+        await supabase
+          .from('invoices')
+          .update({ status: 'cancelled' } as never)
+          .eq('membership_id', mem.id)
+          .eq('brand_id', brandId)
+          .eq('status', 'pending')
+
+        await supabase
+          .from('memberships')
+          .update({ status: 'cancelled' } as never)
+          .eq('id', mem.id)
+          .eq('brand_id', brandId)
+      }
+    }
+
+    revalidatePath('/admin/billing')
+    revalidatePath('/admin/members')
+    return {}
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'An error occurred' }
+  }
+}
+
+// ── getRevenueSummary ────────────────────────────────────────────────────────
+
 export async function getRevenueSummary(): Promise<{
   data?: { month: string; amount: number }[]
   error?: string
@@ -432,28 +539,43 @@ export async function getRevenueSummary(): Promise<{
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
     const sixMonthsAgo = new Date()
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
     sixMonthsAgo.setDate(1)
     sixMonthsAgo.setHours(0, 0, 0, 0)
 
-    const { data, error } = await supabase
+    // Fetch brand timezone for correct month bucketing (L4)
+    const { data: brand } = await supabase
+      .from('brands')
+      .select('timezone')
+      .eq('id', brandId)
+      .single()
+    const tz = (brand as { timezone?: string | null } | null)?.timezone ?? 'Asia/Jakarta'
+
+    const { data: rawData, error } = await supabase
       .from('invoices')
       .select('amount, paid_at')
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .eq('status', 'paid')
       .gte('paid_at', sixMonthsAgo.toISOString())
       .not('paid_at', 'is', null)
 
     if (error) return { error: error.message }
 
+    const data = (rawData ?? []) as { amount: number; paid_at: string | null }[]
     const grouped: Record<string, number> = {}
 
-    for (const invoice of data ?? []) {
+    for (const invoice of data) {
       if (!invoice.paid_at) continue
-      const date = new Date(invoice.paid_at)
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const localStr = new Date(invoice.paid_at).toLocaleDateString('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+      })
+      // en-CA locale gives "YYYY-MM" when requesting year+month
+      const key = localStr.slice(0, 7)
       grouped[key] = (grouped[key] ?? 0) + invoice.amount
     }
 
@@ -463,9 +585,11 @@ export async function getRevenueSummary(): Promise<{
 
     return { data: result }
   } catch (e) {
-    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
+    return { error: e instanceof Error ? e.message : 'An error occurred' }
   }
 }
+
+// ── getMemberInvoices ────────────────────────────────────────────────────────
 
 export async function getMemberInvoices(): Promise<{
   data: InvoiceWithDetails[]
@@ -473,9 +597,11 @@ export async function getMemberInvoices(): Promise<{
 }> {
   try {
     const supabase = createClient()
-    const { user } = await getAuthedProfile(supabase)
+    const { user, profile } = await getAuthedProfile(supabase)
 
-    const { data: rawData, error } = await supabase
+    // L1: scope to the member's current brand so multi-brand members don't see
+    // invoices from other gyms they belong to
+    let query = supabase
       .from('invoices')
       .select(
         `*, profiles!invoices_member_brand_fkey(id, full_name, avatar_url), memberships:membership_id(id, package_id, membership_packages:package_id(id, name))`
@@ -483,10 +609,15 @@ export async function getMemberInvoices(): Promise<{
       .eq('member_id', user.id)
       .order('created_at', { ascending: false })
 
+    if (profile.brand_id) {
+      query = query.eq('brand_id', profile.brand_id)
+    }
+
+    const { data: rawData, error } = await query
     if (error) return { data: [], error: error.message }
 
     return { data: (rawData ?? []) as unknown as InvoiceWithDetails[] }
   } catch (e) {
-    return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
+    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
   }
 }
