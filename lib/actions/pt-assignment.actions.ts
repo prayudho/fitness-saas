@@ -5,54 +5,13 @@ import { revalidatePath } from 'next/cache'
 import { getAuthedProfile } from '@/lib/actions/utils'
 import type { Database } from '@/types/database'
 
-// Typed Supabase helper for tables not yet in generated types (migration-013)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function fromNew(supabase: ReturnType<typeof createClient>, table: string): any {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (supabase as unknown as any).from(table)
-}
-
 type Row<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
-export type ProfileRow = Row<'profiles'>
-export type TrainerRow = Row<'trainers'>
-export type MembershipRow = Row<'memberships'>
+type Insert<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert']
 
-// Manual types for migration-013 tables (not yet in generated database.ts)
-export interface PTAssignmentRow {
-  id: string
-  brand_id: string
-  member_id: string
-  trainer_id: string
-  membership_id: string
-  status: 'active' | 'grace_period' | 'released' | 'reassigned'
-  assigned_at: string
-  assigned_by: string | null
-  grace_started_at: string | null
-  released_at: string | null
-  sales_commission_claimed: boolean
-  sales_commission_percent: number | null
-  sales_commission_amount: number | null
-  notes: string | null
-  created_at: string
-}
-
-export interface PTCommissionPayoutRow {
-  id: string
-  brand_id: string
-  trainer_id: string
-  payout_type: 'session' | 'sales'
-  pt_assignment_id: string | null
-  trainer_session_id: string | null
-  amount: number
-  status: 'pending' | 'approved' | 'paid'
-  period_start: string | null
-  period_end: string | null
-  approved_by: string | null
-  approved_at: string | null
-  paid_at: string | null
-  notes: string | null
-  created_at: string
-}
+export type PTAssignmentRow    = Row<'pt_assignments'>
+export type PTCommissionPayoutRow = Row<'pt_commission_payouts'>
+export type ProfileRow         = Row<'profiles'>
+export type MembershipRow      = Row<'memberships'>
 
 export type PTAssignmentWithDetails = PTAssignmentRow & {
   member_profile: Pick<ProfileRow, 'id' | 'full_name' | 'avatar_url' | 'phone'> | null
@@ -87,16 +46,14 @@ export async function getPTAssignment(input: {
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
 
-    const { data, error } = await supabase
-// @ts-ignore — pt_assignments not yet in generated types
+    const { data: rawData, error } = await supabase
       .from('pt_assignments')
       .select(`
         *,
-        member_profile:profiles!pt_assignments_member_id_fkey (id, full_name, avatar_url, phone),
-        trainer_profile:profiles!pt_assignments_trainer_id_fkey (id, full_name, avatar_url),
-        membership:memberships!pt_assignments_membership_id_fkey (
+        member_profile:profiles!pt_assignments_member_brand_fkey(id, full_name, avatar_url, phone),
+        membership:memberships!pt_assignments_membership_id_fkey(
           *,
-          membership_packages (name, package_category)
+          membership_packages(name, package_category)
         )
       `)
       .eq('brand_id', profile.brand_id)
@@ -106,7 +63,30 @@ export async function getPTAssignment(input: {
       .maybeSingle()
 
     if (error) return { error: error.message }
-    return { data: data as PTAssignmentWithDetails | undefined }
+
+    const data = rawData as unknown as (PTAssignmentRow & {
+      member_profile: PTAssignmentWithDetails['member_profile']
+      membership: PTAssignmentWithDetails['membership']
+    }) | null
+
+    if (!data) return { data: undefined }
+
+    // Fetch trainer profile separately (trainer_id → trainers.id → profiles.id)
+    const { data: trainerProfile } = await supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url')
+      .eq('id', data.trainer_id)
+      .eq('brand_id', profile.brand_id)
+      .maybeSingle()
+
+    return {
+      data: {
+        ...data,
+        member_profile: data.member_profile,
+        trainer_profile: trainerProfile ?? null,
+        membership: data.membership,
+      },
+    }
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'An error occurred' }
   }
@@ -120,8 +100,7 @@ export async function getTrainerActiveMembers(
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: [], error: 'No brand context' }
 
-    const { data, error } = await supabase
-// @ts-ignore — pt_assignments not yet in generated types
+    const { data: rawRows, error } = await supabase
       .from('pt_assignments')
       .select(`
         id,
@@ -129,11 +108,11 @@ export async function getTrainerActiveMembers(
         membership_id,
         assigned_at,
         status,
-        member_profile:profiles!pt_assignments_member_id_fkey (id, full_name, avatar_url),
-        membership:memberships!pt_assignments_membership_id_fkey (
+        member_profile:profiles!pt_assignments_member_brand_fkey(id, full_name, avatar_url),
+        membership:memberships!pt_assignments_membership_id_fkey(
           pt_sessions_remaining,
           pt_sessions_expires_at,
-          membership_packages (name, package_category)
+          membership_packages(name, package_category)
         )
       `)
       .eq('brand_id', profile.brand_id)
@@ -143,25 +122,31 @@ export async function getTrainerActiveMembers(
 
     if (error) return { data: [], error: error.message }
 
-    const result: TrainerActiveMember[] = (data ?? []).map((row) => {
-      const mp = row.member_profile as { id: string; full_name: string; avatar_url: string | null } | null
+    type AssignmentSelectRow = Pick<PTAssignmentRow, 'id' | 'member_id' | 'membership_id' | 'assigned_at' | 'status'> & {
+      member_profile: { id: string; full_name: string; avatar_url: string | null } | null
+      membership: { pt_sessions_remaining: number | null; pt_sessions_expires_at: string | null; membership_packages: { name: string; package_category: string } | null } | null
+    }
+    const data = (rawRows as unknown as AssignmentSelectRow[]) ?? []
+
+    const result: TrainerActiveMember[] = data.map((row) => {
+      const mp  = row.member_profile
       const mem = row.membership as {
         pt_sessions_remaining: number | null
         pt_sessions_expires_at: string | null
         membership_packages: { name: string; package_category: string } | null
       } | null
       return {
-        assignment_id: row.id,
-        member_id: row.member_id,
-        member_name: mp?.full_name ?? 'Unknown',
-        member_avatar_url: mp?.avatar_url ?? null,
-        membership_id: row.membership_id,
-        package_name: mem?.membership_packages?.name ?? '',
-        package_category: mem?.membership_packages?.package_category ?? '',
-        pt_sessions_remaining: mem?.pt_sessions_remaining ?? null,
+        assignment_id:          row.id,
+        member_id:              row.member_id,
+        member_name:            mp?.full_name ?? 'Unknown',
+        member_avatar_url:      mp?.avatar_url ?? null,
+        membership_id:          row.membership_id,
+        package_name:           mem?.membership_packages?.name ?? '',
+        package_category:       mem?.membership_packages?.package_category ?? '',
+        pt_sessions_remaining:  mem?.pt_sessions_remaining ?? null,
         pt_sessions_expires_at: mem?.pt_sessions_expires_at ?? null,
-        assigned_at: row.assigned_at,
-        status: row.status,
+        assigned_at:            row.assigned_at,
+        status:                 row.status,
       }
     })
 
@@ -184,9 +169,7 @@ export async function assignPT(input: {
     const { user, profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
 
-    // Check if member already has an active assignment for this membership
     const { data: existing } = await supabase
-// @ts-ignore — pt_assignments not yet in generated types
       .from('pt_assignments')
       .select('id')
       .eq('brand_id', profile.brand_id)
@@ -197,7 +180,6 @@ export async function assignPT(input: {
 
     if (existing) return { error: 'Member already has an active PT assignment for this membership' }
 
-    // Validate trainer belongs to this brand
     const { data: trainer, error: tErr } = await supabase
       .from('trainers')
       .select('id')
@@ -207,67 +189,66 @@ export async function assignPT(input: {
 
     if (tErr || !trainer) return { error: 'Trainer not found' }
 
-    // Fetch package to determine sales commission amount
     const { data: membership } = await supabase
       .from('memberships')
-      .select(`
-        *,
-        membership_packages (price, sales_commission_override_percent)
-      `)
+      .select('*, membership_packages(price, sales_commission_override_percent)')
       .eq('id', input.membership_id)
       .single()
 
-    const { data: brand } = await supabase
+    const { data: brandRaw } = await supabase
       .from('brands')
       .select('pt_sales_commission_enabled, pt_sales_commission_percent')
       .eq('id', profile.brand_id)
       .single()
+    const brand = brandRaw as unknown as { pt_sales_commission_enabled: boolean; pt_sales_commission_percent: number } | null
 
     const pkg = (membership as { membership_packages: { price: number; sales_commission_override_percent: number | null } | null } | null)?.membership_packages
     const salesEnabled = brand?.pt_sales_commission_enabled ?? true
     const salesPercent = pkg?.sales_commission_override_percent ?? brand?.pt_sales_commission_percent ?? 10
-    const salesAmount = salesEnabled && pkg ? (pkg.price * salesPercent) / 100 : null
+    const salesAmount  = salesEnabled && pkg ? (pkg.price * salesPercent) / 100 : null
 
-    const { data: assignment, error } = await supabase
-// @ts-ignore — pt_assignments not yet in generated types
+    const assignmentInsert: Insert<'pt_assignments'> = {
+      brand_id:                 profile.brand_id,
+      member_id:                input.member_id,
+      trainer_id:               input.trainer_id,
+      membership_id:            input.membership_id,
+      status:                   'active',
+      assigned_by:              user.id,
+      notes:                    input.notes ?? null,
+      sales_commission_percent: salesEnabled ? salesPercent : null,
+      sales_commission_amount:  salesAmount,
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: assignment, error } = await (supabase as any)
       .from('pt_assignments')
-      .insert({
-        brand_id: profile.brand_id,
-        member_id: input.member_id,
-        trainer_id: input.trainer_id,
-        membership_id: input.membership_id,
-        status: 'active',
-        assigned_by: user.id,
-        notes: input.notes ?? null,
-        sales_commission_percent: salesEnabled ? salesPercent : null,
-        sales_commission_amount: salesAmount,
-      })
+      .insert(assignmentInsert)
       .select()
-      .single()
+      .single() as { data: PTAssignmentRow | null; error: { message: string } | null }
 
     if (error) return { error: error.message }
 
-    // Create sales commission payout if applicable
     if (salesAmount && assignment) {
-      await supabase.from('pt_commission_payouts').insert({
-        brand_id: profile.brand_id,
-        trainer_id: input.trainer_id,
-        payout_type: 'sales',
+      const payoutInsert: Insert<'pt_commission_payouts'> = {
+        brand_id:         profile.brand_id,
+        trainer_id:       input.trainer_id,
+        payout_type:      'sales',
         pt_assignment_id: assignment.id,
-        amount: salesAmount,
-        status: 'pending',
-      })
+        amount:           salesAmount,
+        status:           'pending',
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('pt_commission_payouts').insert(payoutInsert)
 
       await supabase
-  // @ts-ignore — pt_assignments not yet in generated types
-      .from('pt_assignments')
-        .update({ sales_commission_claimed: true })
+        .from('pt_assignments')
+        .update({ sales_commission_claimed: true } as never)
         .eq('id', assignment.id)
     }
 
     revalidatePath(`/admin/members/${input.member_id}`)
     revalidatePath(`/admin/trainers/${input.trainer_id}`)
-    return { data: assignment }
+    return { data: assignment ?? undefined }
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'An error occurred' }
   }
@@ -285,45 +266,44 @@ export async function reassignPT(input: {
     const { user, profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
 
-    const { data: old, error: oldErr } = await supabase
-// @ts-ignore — pt_assignments not yet in generated types
+    const { data: oldRaw, error: oldErr } = await supabase
       .from('pt_assignments')
       .select('*')
       .eq('id', input.assignment_id)
       .eq('brand_id', profile.brand_id)
       .single()
+    const old = oldRaw as unknown as PTAssignmentRow | null
 
     if (oldErr || !old) return { error: 'Assignment not found' }
 
-    // Mark old as reassigned
     await supabase
-// @ts-ignore — pt_assignments not yet in generated types
       .from('pt_assignments')
-      .update({ status: 'reassigned', released_at: new Date().toISOString() })
+      .update({ status: 'reassigned', released_at: new Date().toISOString() } as never)
       .eq('id', input.assignment_id)
 
-    // Create new assignment
-    const { data: newAssignment, error: newErr } = await supabase
-// @ts-ignore — pt_assignments not yet in generated types
+    const newInsert: Insert<'pt_assignments'> = {
+      brand_id:     profile.brand_id,
+      member_id:    old.member_id,
+      trainer_id:   input.new_trainer_id,
+      membership_id: old.membership_id,
+      status:       'active',
+      assigned_by:  user.id,
+      notes:        input.notes ?? null,
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: newAssignment, error: newErr } = await (supabase as any)
       .from('pt_assignments')
-      .insert({
-        brand_id: profile.brand_id,
-        member_id: old.member_id,
-        trainer_id: input.new_trainer_id,
-        membership_id: old.membership_id,
-        status: 'active',
-        assigned_by: user.id,
-        notes: input.notes ?? null,
-      })
+      .insert(newInsert)
       .select()
-      .single()
+      .single() as { data: PTAssignmentRow | null; error: { message: string } | null }
 
     if (newErr) return { error: newErr.message }
 
     revalidatePath(`/admin/members/${old.member_id}`)
     revalidatePath(`/admin/trainers/${old.trainer_id}`)
     revalidatePath(`/admin/trainers/${input.new_trainer_id}`)
-    return { data: newAssignment }
+    return { data: newAssignment ?? undefined }
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'An error occurred' }
   }
@@ -339,20 +319,19 @@ export async function releasePT(
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
 
-    const { data: existing } = await supabase
-// @ts-ignore — pt_assignments not yet in generated types
+    const { data: existingRaw } = await supabase
       .from('pt_assignments')
       .select('*')
       .eq('id', assignmentId)
       .eq('brand_id', profile.brand_id)
       .single()
+    const existing = existingRaw as unknown as PTAssignmentRow | null
 
     if (!existing) return { error: 'Assignment not found' }
 
     const { error } = await supabase
-// @ts-ignore — pt_assignments not yet in generated types
       .from('pt_assignments')
-      .update({ status: 'released', released_at: new Date().toISOString() })
+      .update({ status: 'released', released_at: new Date().toISOString() } as never)
       .eq('id', assignmentId)
 
     if (error) return { error: error.message }
@@ -376,9 +355,8 @@ export async function startGracePeriod(
     if (!profile.brand_id) return { error: 'No brand context' }
 
     const { error } = await supabase
-// @ts-ignore — pt_assignments not yet in generated types
       .from('pt_assignments')
-      .update({ status: 'grace_period', grace_started_at: new Date().toISOString() })
+      .update({ status: 'grace_period', grace_started_at: new Date().toISOString() } as never)
       .eq('id', assignmentId)
       .eq('brand_id', profile.brand_id)
       .eq('status', 'active')
@@ -401,9 +379,8 @@ export async function autoReleasePT(
     if (!profile.brand_id) return { error: 'No brand context' }
 
     const { error } = await supabase
-// @ts-ignore — pt_assignments not yet in generated types
       .from('pt_assignments')
-      .update({ status: 'released', released_at: new Date().toISOString() })
+      .update({ status: 'released', released_at: new Date().toISOString() } as never)
       .eq('id', assignmentId)
       .eq('brand_id', profile.brand_id)
       .eq('status', 'grace_period')
@@ -426,13 +403,12 @@ export async function approveCommission(
     if (!profile.brand_id) return { error: 'No brand context' }
 
     const { error } = await supabase
-// @ts-ignore — pt_commission_payouts not yet in generated types
       .from('pt_commission_payouts')
       .update({
-        status: 'approved',
+        status:      'approved',
         approved_by: user.id,
         approved_at: new Date().toISOString(),
-      })
+      } as never)
       .eq('id', payoutId)
       .eq('brand_id', profile.brand_id)
       .eq('status', 'pending')
@@ -455,12 +431,11 @@ export async function markCommissionPaid(
     if (!profile.brand_id) return { error: 'No brand context' }
 
     const { error } = await supabase
-// @ts-ignore — pt_commission_payouts not yet in generated types
       .from('pt_commission_payouts')
       .update({
-        status: 'paid',
+        status:  'paid',
         paid_at: new Date().toISOString(),
-      })
+      } as never)
       .eq('id', payoutId)
       .eq('brand_id', profile.brand_id)
       .eq('status', 'approved')
@@ -486,7 +461,6 @@ export async function getTrainerPayouts(
     if (!profile.brand_id) return { data: [], error: 'No brand context' }
 
     let query = supabase
-// @ts-ignore — pt_commission_payouts not yet in generated types
       .from('pt_commission_payouts')
       .select('*')
       .eq('brand_id', profile.brand_id)
@@ -496,7 +470,7 @@ export async function getTrainerPayouts(
     if (filters?.status) query = query.eq('status', filters.status)
     if (filters?.type)   query = query.eq('payout_type', filters.type)
     if (filters?.month) {
-      const d = new Date(filters.month)
+      const d     = new Date(filters.month)
       const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString()
       const end   = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).toISOString()
       query = query.gte('created_at', start).lte('created_at', end)
@@ -519,26 +493,34 @@ export async function getBrandPayouts(filters?: {
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: [], error: 'No brand context' }
 
-    let query = supabase
-// @ts-ignore — pt_commission_payouts not yet in generated types
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query = (supabase as any)
       .from('pt_commission_payouts')
-      .select(`
-        *,
-        trainer:profiles!pt_commission_payouts_trainer_id_fkey (full_name)
-      `)
+      .select('*')
       .eq('brand_id', profile.brand_id)
       .order('created_at', { ascending: false })
 
     if (filters?.status)    query = query.eq('status', filters.status)
     if (filters?.trainerId) query = query.eq('trainer_id', filters.trainerId)
 
-    const { data, error } = await query
-    if (error) return { data: [], error: error.message }
+    const { data: rawPayouts, error } = await query
+    if (error) return { data: [], error: (error as { message: string }).message }
 
-    const result = (data ?? []).map((row) => ({
-      ...(row as PTCommissionPayoutRow),
-      trainer_name: (row as { trainer: { full_name: string } | null }).trainer?.full_name ?? '',
-    }))
+    const payouts = (rawPayouts as PTCommissionPayoutRow[]) ?? []
+
+    const trainerIds = [...new Set(payouts.map((p) => p.trainer_id))]
+    const { data: trainerProfiles } = trainerIds.length > 0
+      ? await supabase.from('profiles').select('id, full_name').in('id', trainerIds)
+      : { data: [] as { id: string; full_name: string }[] }
+
+    const nameMap: Record<string, string> = Object.fromEntries(
+      (trainerProfiles ?? []).map((p) => [p.id, p.full_name ?? ''])
+    )
+
+    const result = payouts.map((row) => ({
+      ...row,
+      trainer_name: nameMap[row.trainer_id] ?? '',
+    })) as (PTCommissionPayoutRow & { trainer_name: string })[]
 
     return { data: result }
   } catch (e) {

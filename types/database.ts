@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   public: {
     Tables: {
       brands: {
@@ -25,6 +20,9 @@ export type Database = {
           name: string
           owner_user_id: string | null
           primary_color: string
+          pt_assignment_grace_days: number
+          pt_sales_commission_enabled: boolean
+          pt_sales_commission_percent: number
           secondary_color: string | null
           slug: string
           subscription_plan: Database["public"]["Enums"]["subscription_plan"]
@@ -41,6 +39,9 @@ export type Database = {
           name: string
           owner_user_id?: string | null
           primary_color?: string
+          pt_assignment_grace_days?: number
+          pt_sales_commission_enabled?: boolean
+          pt_sales_commission_percent?: number
           secondary_color?: string | null
           slug: string
           subscription_plan?: Database["public"]["Enums"]["subscription_plan"]
@@ -57,6 +58,9 @@ export type Database = {
           name?: string
           owner_user_id?: string | null
           primary_color?: string
+          pt_assignment_grace_days?: number
+          pt_sales_commission_enabled?: boolean
+          pt_sales_commission_percent?: number
           secondary_color?: string | null
           slug?: string
           subscription_plan?: Database["public"]["Enums"]["subscription_plan"]
@@ -601,6 +605,8 @@ export type Database = {
           pt_session_credits: number | null
           pt_session_expiry_days: number | null
           pt_sessions_included: number
+          sales_commission_override_percent: number | null
+          session_commission_amount: number | null
           session_credits: number | null
           type: Database["public"]["Enums"]["membership_type"]
           updated_at: string
@@ -622,6 +628,8 @@ export type Database = {
           pt_session_credits?: number | null
           pt_session_expiry_days?: number | null
           pt_sessions_included?: number
+          sales_commission_override_percent?: number | null
+          session_commission_amount?: number | null
           session_credits?: number | null
           type: Database["public"]["Enums"]["membership_type"]
           updated_at?: string
@@ -643,6 +651,8 @@ export type Database = {
           pt_session_credits?: number | null
           pt_session_expiry_days?: number | null
           pt_sessions_included?: number
+          sales_commission_override_percent?: number | null
+          session_commission_amount?: number | null
           session_credits?: number | null
           type?: Database["public"]["Enums"]["membership_type"]
           updated_at?: string
@@ -935,6 +945,186 @@ export type Database = {
           },
         ]
       }
+      pt_assignments: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          brand_id: string
+          created_at: string
+          grace_started_at: string | null
+          id: string
+          member_id: string
+          membership_id: string
+          notes: string | null
+          released_at: string | null
+          sales_commission_amount: number | null
+          sales_commission_claimed: boolean
+          sales_commission_percent: number | null
+          status: string
+          trainer_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          brand_id: string
+          created_at?: string
+          grace_started_at?: string | null
+          id?: string
+          member_id: string
+          membership_id: string
+          notes?: string | null
+          released_at?: string | null
+          sales_commission_amount?: number | null
+          sales_commission_claimed?: boolean
+          sales_commission_percent?: number | null
+          status?: string
+          trainer_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          brand_id?: string
+          created_at?: string
+          grace_started_at?: string | null
+          id?: string
+          member_id?: string
+          membership_id?: string
+          notes?: string | null
+          released_at?: string | null
+          sales_commission_amount?: number | null
+          sales_commission_claimed?: boolean
+          sales_commission_percent?: number | null
+          status?: string
+          trainer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pt_assignments_assigned_by_brand_fkey"
+            columns: ["assigned_by", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "pt_assignments_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pt_assignments_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "pt_assignments_membership_id_fkey"
+            columns: ["membership_id"]
+            isOneToOne: false
+            referencedRelation: "memberships"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pt_assignments_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "trainers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pt_commission_payouts: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          brand_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          paid_at: string | null
+          payout_type: string
+          period_end: string | null
+          period_start: string | null
+          pt_assignment_id: string | null
+          status: string
+          trainer_id: string
+          trainer_session_id: string | null
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          brand_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          payout_type: string
+          period_end?: string | null
+          period_start?: string | null
+          pt_assignment_id?: string | null
+          status?: string
+          trainer_id: string
+          trainer_session_id?: string | null
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          brand_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          payout_type?: string
+          period_end?: string | null
+          period_start?: string | null
+          pt_assignment_id?: string | null
+          status?: string
+          trainer_id?: string
+          trainer_session_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pt_commission_payouts_approved_by_brand_fkey"
+            columns: ["approved_by", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "pt_commission_payouts_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pt_commission_payouts_pt_assignment_id_fkey"
+            columns: ["pt_assignment_id"]
+            isOneToOne: false
+            referencedRelation: "pt_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pt_commission_payouts_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "trainers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pt_commission_payouts_trainer_session_id_fkey"
+            columns: ["trainer_session_id"]
+            isOneToOne: false
+            referencedRelation: "trainer_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       renewal_log: {
         Row: {
           id: string
@@ -1036,14 +1226,19 @@ export type Database = {
       trainer_sessions: {
         Row: {
           brand_id: string
+          commission_approved_at: string | null
+          commission_approved_by: string | null
           commission_earned: number | null
+          commission_status: string | null
           created_at: string
           duration_minutes: number
           id: string
           member_id: string
           membership_id: string | null
           notes: string | null
+          pt_assignment_id: string | null
           scheduled_at: string
+          session_commission_amount: number | null
           session_fee: number | null
           status: Database["public"]["Enums"]["session_status"]
           trainer_id: string
@@ -1051,14 +1246,19 @@ export type Database = {
         }
         Insert: {
           brand_id: string
+          commission_approved_at?: string | null
+          commission_approved_by?: string | null
           commission_earned?: number | null
+          commission_status?: string | null
           created_at?: string
           duration_minutes?: number
           id?: string
           member_id: string
           membership_id?: string | null
           notes?: string | null
+          pt_assignment_id?: string | null
           scheduled_at: string
+          session_commission_amount?: number | null
           session_fee?: number | null
           status?: Database["public"]["Enums"]["session_status"]
           trainer_id: string
@@ -1066,14 +1266,19 @@ export type Database = {
         }
         Update: {
           brand_id?: string
+          commission_approved_at?: string | null
+          commission_approved_by?: string | null
           commission_earned?: number | null
+          commission_status?: string | null
           created_at?: string
           duration_minutes?: number
           id?: string
           member_id?: string
           membership_id?: string | null
           notes?: string | null
+          pt_assignment_id?: string | null
           scheduled_at?: string
+          session_commission_amount?: number | null
           session_fee?: number | null
           status?: Database["public"]["Enums"]["session_status"]
           trainer_id?: string
@@ -1086,6 +1291,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "brands"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trainer_sessions_commission_approved_by_brand_fkey"
+            columns: ["commission_approved_by", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "brand_id"]
           },
           {
             foreignKeyName: "trainer_sessions_member_brand_fkey"
@@ -1142,6 +1354,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_expiry_report"
             referencedColumns: ["membership_id"]
+          },
+          {
+            foreignKeyName: "trainer_sessions_pt_assignment_id_fkey"
+            columns: ["pt_assignment_id"]
+            isOneToOne: false
+            referencedRelation: "pt_assignments"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "trainer_sessions_trainer_id_fkey"
@@ -1377,29 +1596,94 @@ export type Database = {
           },
         ]
       }
-      v_trainer_commission_summary: {
+      v_pt_assignments: {
         Row: {
+          assigned_at: string | null
+          assigned_by: string | null
           brand_id: string | null
-          month: string | null
-          sessions_cancelled: number | null
-          sessions_completed: number | null
-          sessions_no_show: number | null
-          total_commission: number | null
-          total_revenue: number | null
-          total_sessions: number | null
+          grace_started_at: string | null
+          id: string | null
+          member_avatar_url: string | null
+          member_id: string | null
+          member_name: string | null
+          member_phone: string | null
+          membership_id: string | null
+          notes: string | null
+          package_category: string | null
+          package_name: string | null
+          pt_sessions_expires_at: string | null
+          pt_sessions_remaining: number | null
+          released_at: string | null
+          sales_commission_amount: number | null
+          sales_commission_claimed: boolean | null
+          status: string | null
+          trainer_avatar_url: string | null
           trainer_id: string | null
           trainer_name: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "trainer_sessions_brand_id_fkey"
+            foreignKeyName: "pt_assignments_assigned_by_brand_fkey"
+            columns: ["assigned_by", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "pt_assignments_brand_id_fkey"
             columns: ["brand_id"]
             isOneToOne: false
             referencedRelation: "brands"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "trainer_sessions_trainer_id_fkey"
+            foreignKeyName: "pt_assignments_member_brand_fkey"
+            columns: ["member_id", "brand_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "brand_id"]
+          },
+          {
+            foreignKeyName: "pt_assignments_membership_id_fkey"
+            columns: ["membership_id"]
+            isOneToOne: false
+            referencedRelation: "memberships"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pt_assignments_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "trainers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_trainer_commission_summary: {
+        Row: {
+          brand_id: string | null
+          period: string | null
+          total_commission_all: number | null
+          total_sales_commission_approved: number | null
+          total_sales_commission_paid: number | null
+          total_sales_commission_pending: number | null
+          total_session_commission_approved: number | null
+          total_session_commission_paid: number | null
+          total_session_commission_pending: number | null
+          total_sessions_completed: number | null
+          trainer_id: string | null
+          trainer_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pt_commission_payouts_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pt_commission_payouts_trainer_id_fkey"
             columns: ["trainer_id"]
             isOneToOne: false
             referencedRelation: "trainers"

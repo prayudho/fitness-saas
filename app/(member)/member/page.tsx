@@ -143,27 +143,35 @@ async function fetchDashboardData(): Promise<DashboardData> {
   })
 
   if (ptMem) {
-    const { data: assignment } = await supabase
+    const assignmentResult = await supabase
       .from('pt_assignments')
-      .select(`
-        id,
-        trainer_id,
-        status,
-        trainer_profile:profiles!pt_assignments_trainer_id_fkey (full_name, avatar_url)
-      `)
+      .select('id, trainer_id, status')
       .eq('member_id', user.id)
       .eq('membership_id', ptMem.id)
       .in('status', ['active', 'grace_period'])
       .maybeSingle()
 
+    const assignment = assignmentResult.data as {
+      id: string; trainer_id: string; status: string
+    } | null
+
     if (assignment) {
-      const tp = (assignment as unknown as { trainer_profile: { full_name: string; avatar_url: string | null } | null }).trainer_profile
+      const trainerResult = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', assignment.trainer_id)
+        .maybeSingle()
+
+      const trainerProfile = trainerResult.data as {
+        full_name: string; avatar_url: string | null
+      } | null
+
       assignedTrainer = {
-        assignment_id: assignment.id,
-        trainer_id:    assignment.trainer_id,
-        trainer_name:  tp?.full_name ?? 'Unknown',
-        trainer_avatar_url: tp?.avatar_url ?? null,
-        status: assignment.status,
+        assignment_id:      assignment.id,
+        trainer_id:         assignment.trainer_id,
+        trainer_name:       trainerProfile?.full_name ?? 'Unknown',
+        trainer_avatar_url: trainerProfile?.avatar_url ?? null,
+        status:             assignment.status,
       }
     }
   }

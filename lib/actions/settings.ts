@@ -141,8 +141,7 @@ export async function updateCommissionSettings(
     return { error: 'Unauthorized' }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('brands')
     .update({
       pt_assignment_grace_days:    data.pt_assignment_grace_days,

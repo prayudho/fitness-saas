@@ -104,8 +104,7 @@ export async function createPackage(
     // Derive duration_days from gym_access_days for backward compatibility
     const effectiveDurationDays = input.gym_access_days ?? input.duration_days ?? null
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('membership_packages')
       .insert({
         brand_id:              profile.brand_id!,
@@ -162,14 +161,10 @@ export async function updatePackage(
     if (input.currency !== undefined) updateData.currency = input.currency
     if (input.allow_freeze !== undefined) updateData.allow_freeze = input.allow_freeze
     if (input.max_freeze_days !== undefined) updateData.max_freeze_days = input.max_freeze_days
-    if (input.session_commission_amount !== undefined) {
-      const db = updateData as Record<string, unknown>
-      db.session_commission_amount = input.session_commission_amount
-    }
-    if (input.sales_commission_override_percent !== undefined) {
-      const db = updateData as Record<string, unknown>
-      db.sales_commission_override_percent = input.sales_commission_override_percent
-    }
+    if (input.session_commission_amount !== undefined)
+      updateData.session_commission_amount = input.session_commission_amount
+    if (input.sales_commission_override_percent !== undefined)
+      updateData.sales_commission_override_percent = input.sales_commission_override_percent
 
     const { data, error } = await supabase
       .from('membership_packages')
