@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import type { ColumnDef } from '@tanstack/react-table'
-import { MoreHorizontal, Pencil, Snowflake, XCircle, Eye } from 'lucide-react'
+import { MoreHorizontal, Pencil, Snowflake, XCircle, Eye, Dumbbell } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { formatDate } from '@/lib/utils'
 
@@ -19,6 +20,9 @@ export type MembershipSummary = {
   id: string
   status: string
   expires_at: string | null
+  package_category: string | null
+  pt_sessions_remaining: number | null
+  pt_sessions_status: string | null
   membership_packages: { name: string } | null
 }
 
@@ -104,6 +108,42 @@ export function getMemberColumns(handlers: MemberColumnHandlers): ColumnDef<Memb
         }
 
         return <span className="text-sm">{formatDate(activeMembership.expires_at)}</span>
+      },
+    },
+    {
+      id: 'pt_sessions',
+      header: 'PT Sessions',
+      cell: ({ row }) => {
+        const ptMembership = row.original.memberships.find(
+          (m) => m.package_category === 'pt_sessions' || m.package_category === 'bundled'
+        )
+        if (!ptMembership) {
+          return <span className="text-sm text-muted-foreground">—</span>
+        }
+        const remaining = ptMembership.pt_sessions_remaining
+        const ptStatus = ptMembership.pt_sessions_status ?? 'active'
+        return (
+          <div className="flex flex-col gap-1">
+            {remaining !== null && (
+              <div className="flex items-center gap-1.5">
+                <Dumbbell className="h-3 w-3 text-purple-600" />
+                <span className="text-sm font-medium">{remaining} left</span>
+              </div>
+            )}
+            <Badge
+              variant={
+                ptStatus === 'expired' || ptStatus === 'exhausted'
+                  ? 'destructive'
+                  : ptStatus === 'active' && remaining !== null && remaining <= 3
+                  ? 'secondary'
+                  : 'outline'
+              }
+              className="text-xs w-fit capitalize"
+            >
+              {ptStatus === 'exhausted' ? 'Exhausted' : ptStatus === 'expired' ? 'Expired' : 'Active'}
+            </Badge>
+          </div>
+        )
       },
     },
     {

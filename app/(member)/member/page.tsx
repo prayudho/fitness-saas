@@ -337,7 +337,7 @@ function PTSessionsCard({ membership, assignedTrainer }: {
   }
 
   // Session circles (max 10 shown)
-  const totalCredits = m.pt_session_credits as number | undefined
+  const totalCredits = membership.membership_packages?.pt_session_credits ?? undefined
   const displayMax = 10
   const circleCount = Math.min(totalCredits ?? ptRemaining ?? 10, displayMax)
   const overflowCount = totalCredits && totalCredits > displayMax ? totalCredits - displayMax : 0
