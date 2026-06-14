@@ -681,6 +681,195 @@ export async function getMemberPTData(): Promise<{ data: MemberPTData | null; er
   }
 }
 
+// ── getAvailableSlots ─────────────────────────────────────────────────────────
+// Returns open time slots for a trainer on a given date, based on their weekly
+// recurring availability minus already-booked sessions.
+export async function getAvailableSlots(
+  trainerId: string,
+  dateStr: string,       // YYYY-MM-DD (caller's local date)
+  durationMinutes: number = 60
+): Promise<{ data: { time: string; label: string }[]; error?: string }> {
+  try {
+    const supabase = createClient()
+    const { profile } = await getAuthedProfile(supabase)
+    if (!profile.brand_id) return { data: [], error: 'No brand context' }
+
+    // Get trainer's weekly recurring slots for this day of week
+    const dayOfWeek = new Date(dateStr + 'T12:00:00').getDay() // noon avoids DST edge
+    const { data: avail } = await supabase
+      .from('trainer_availability')
+      .select('start_time, end_time')
+      .eq('trainer_id', trainerId)
+      .eq('day_of_week', dayOfWeek)
+
+    if (!avail || avail.length === 0) return { data: [] }
+
+    // Fetch booked sessions with a ±1 day window to safely handle timezone differences
+    const { data: booked } = await supabase
+      .from('trainer_sessions')
+      .select('scheduled_at, duration_minutes')
+      .eq('trainer_id', trainerId)
+      .eq('brand_id', profile.brand_id)
+      .eq('status', 'scheduled')
+      .gte('scheduled_at', `${dateStr}T00:00:00`)
+      .lt('scheduled_at', `${dateStr}T24:00:00`)
+
+    const bookedRanges = (booked ?? []).map((s) => ({
+      start: new Date(s.scheduled_at).getTime(),
+      end:   new Date(s.scheduled_at).getTime() + (s.duration_minutes ?? 60) * 60000,
+    }))
+
+    const now = new Date()
+    const slots: { time: string; label: string }[] = []
+
+    for (const slot of avail) {
+      // TIME columns come back as "HH:MM:SS"
+      const [sh, sm] = (slot.start_time as string).split(':').map(Number)
+      const [eh, em] = (slot.end_time   as string).split(':').map(Number)
+      const availEndMin = eh * 60 + em
+
+      let curH = sh, curM = sm
+      while (true) {
+        const slotEndMin = curH * 60 + curM + durationMinutes
+        if (slotEndMin > availEndMin) break
+
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const timeStr = `${dateStr}T${pad(curH)}:${pad(curM)}:00`
+        const slotDate = new Date(timeStr)
+
+        // Skip past times
+        if (slotDate > now) {
+          const slotStart = slotDate.getTime()
+          const slotEnd   = slotStart + durationMinutes * 60000
+
+          const conflict = bookedRanges.some(
+            (b) => slotStart < b.end && slotEnd > b.start
+          )
+
+          if (!conflict) {
+            const h12 = curH % 12 || 12
+            const ampm = curH < 12 ? 'AM' : 'PM'
+            slots.push({
+              time:  timeStr,
+              label: `${h12}:${pad(curM)} ${ampm}`,
+            })
+          }
+        }
+
+        // Advance by 30-minute increments
+        curM += 30
+        if (curM >= 60) { curM -= 60; curH++ }
+      }
+    }
+
+    return { data: slots }
+  } catch (e) {
+    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+  }
+}
+
+// ── bookSessionByTrainer ──────────────────────────────────────────────────────
+// Trainer books a session for one of their assigned clients.
+// Same business rules as bookMemberPTSession — just called from trainer context.
+export async function bookSessionByTrainer(input: {
+  member_id: string
+  scheduled_at: string
+  duration_minutes?: number
+  notes?: string
+}): Promise<{ data?: { id: string }; error?: string }> {
+  try {
+    const supabase = createClient()
+    const { profile } = await getAuthedProfile(supabase)
+    if (!profile.brand_id) return { error: 'No brand context' }
+    if (profile.role !== 'trainer') return { error: 'Trainer access required.' }
+
+    const trainerId = profile.id  // trainers.id is FK to profiles.id
+
+    // Verify the member is actively assigned to this trainer
+    const { data: assignment } = await supabase
+      .from('pt_assignments')
+      .select('id, membership_id, status')
+      .eq('trainer_id', trainerId)
+      .eq('member_id', input.member_id)
+      .eq('brand_id', profile.brand_id)
+      .eq('status', 'active')
+      .maybeSingle()
+
+    if (!assignment) return { error: 'This member is not currently assigned to you.' }
+
+    if (new Date(input.scheduled_at) <= new Date())
+      return { error: 'Session must be scheduled in the future.' }
+
+    const { data: membership } = await supabase
+      .from('memberships')
+      .select('id, pt_sessions_remaining, pt_sessions_status')
+      .eq('id', assignment.membership_id)
+      .maybeSingle()
+
+    if (!membership) return { error: 'PT membership not found.' }
+    if ((membership.pt_sessions_remaining ?? 0) <= 0)
+      return { error: "No PT sessions remaining on this member's package." }
+    if (membership.pt_sessions_status === 'exhausted')
+      return { error: "Member's PT sessions have been exhausted." }
+    if (membership.pt_sessions_status === 'expired')
+      return { error: "Member's PT sessions have expired." }
+
+    // Schedule conflict check
+    const newStart = new Date(input.scheduled_at)
+    const newEnd   = new Date(newStart.getTime() + (input.duration_minutes ?? 60) * 60000)
+    const { count: conflict } = await supabase
+      .from('trainer_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('trainer_id', trainerId)
+      .eq('brand_id', profile.brand_id)
+      .eq('status', 'scheduled')
+      .gte('scheduled_at', newStart.toISOString())
+      .lt('scheduled_at', newEnd.toISOString())
+    if ((conflict ?? 0) > 0)
+      return { error: 'You already have a session scheduled at that time.' }
+
+    // Use service client: trainer can insert trainer_sessions via RLS, but
+    // updating memberships requires service-role bypass
+    const svc = createServiceClient()
+
+    const { data: session, error: insertErr } = await svc
+      .from('trainer_sessions')
+      .insert({
+        brand_id:         profile.brand_id,
+        trainer_id:       trainerId,
+        member_id:        input.member_id,
+        pt_assignment_id: assignment.id,
+        scheduled_at:     input.scheduled_at,
+        duration_minutes: input.duration_minutes ?? 60,
+        notes:            input.notes ?? null,
+        status:           'scheduled',
+        session_fee:      null,
+      })
+      .select('id')
+      .single()
+
+    if (insertErr) throw insertErr
+
+    const newRemaining = (membership.pt_sessions_remaining ?? 1) - 1
+    await svc
+      .from('memberships')
+      .update({
+        pt_sessions_remaining: newRemaining,
+        ...(newRemaining <= 0 ? { pt_sessions_status: 'exhausted' as never } : {}),
+      } as never)
+      .eq('id', membership.id)
+
+    revalidatePath('/trainer/sessions')
+    revalidatePath('/trainer/clients')
+    revalidatePath('/member/pt-booking')
+    revalidatePath('/member')
+
+    return { data: { id: session.id } }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'An error occurred' }
+  }
+}
+
 export async function bookMemberPTSession(input: {
   scheduled_at: string
   duration_minutes?: number

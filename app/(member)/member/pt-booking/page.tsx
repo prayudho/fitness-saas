@@ -38,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Dumbbell, UserX, CalendarPlus } from 'lucide-react'
+import { Dumbbell, UserX, CalendarPlus, Clock, Calendar } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   getMemberPTData,
@@ -46,19 +46,20 @@ import {
   bookMemberPTSession,
 } from '@/lib/actions/trainers'
 import type { TrainerSessionWithTrainer } from '@/lib/actions/trainers'
+import { useAvailableSlots } from '@/lib/hooks/use-trainers'
 import { useAuth } from '@/lib/hooks/use-auth'
-import { formatDate, formatCurrency } from '@/lib/utils'
+import { formatDate, formatCurrency, cn } from '@/lib/utils'
 
+// Booking form: date + slot picker replaces raw datetime-local
 const bookingSchema = z.object({
-  scheduled_at: z.string().min(1, 'Please select a date and time').refine(
-    (val) => new Date(val) > new Date(),
-    'Session must be scheduled in the future'
-  ),
+  date:             z.string().min(1, 'Please select a date'),
+  scheduled_at:     z.string().min(1, 'Please select a time slot'),
   duration_minutes: z.coerce.number().min(15),
-  notes: z.string().optional(),
+  notes:            z.string().optional(),
 })
-
 type BookingForm = z.infer<typeof bookingSchema>
+
+const SESSION_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const sessionColumns: ColumnDef<TrainerSessionWithTrainer>[] = [
   {
@@ -66,7 +67,7 @@ const sessionColumns: ColumnDef<TrainerSessionWithTrainer>[] = [
     header: 'Trainer',
     cell: ({ row }) => {
       const trainer = row.original.trainer
-      const name = trainer?.profiles?.full_name ?? 'Unknown'
+      const name    = trainer?.profiles?.full_name ?? 'Unknown'
       const initials = name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
       return (
         <div className="flex items-center gap-2">
@@ -114,32 +115,47 @@ const sessionColumns: ColumnDef<TrainerSessionWithTrainer>[] = [
   },
 ]
 
+// ── Booking sheet ─────────────────────────────────────────────────────────────
+
 function BookingSheet({
   open,
   onOpenChange,
   trainerName,
+  trainerId,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   trainerName: string
+  trainerId: string
 }) {
   const queryClient = useQueryClient()
 
   const form = useForm<BookingForm>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
-      scheduled_at: '',
+      date:             '',
+      scheduled_at:     '',
       duration_minutes: 60,
-      notes: '',
+      notes:            '',
     },
   })
+
+  const watchDate     = form.watch('date')
+  const watchDuration = form.watch('duration_minutes')
+  const watchSlot     = form.watch('scheduled_at')
+
+  const { data: slots = [], isFetching: slotsLoading } = useAvailableSlots(
+    trainerId,
+    watchDate,
+    watchDuration
+  )
 
   const mutation = useMutation({
     mutationFn: (data: BookingForm) =>
       bookMemberPTSession({
-        scheduled_at: new Date(data.scheduled_at).toISOString(),
+        scheduled_at:     data.scheduled_at,
         duration_minutes: data.duration_minutes,
-        notes: data.notes || undefined,
+        notes:            data.notes || undefined,
       }),
     onSuccess: (result) => {
       if (result.error) {
@@ -149,11 +165,14 @@ function BookingSheet({
       toast.success('Session booked successfully!')
       queryClient.invalidateQueries({ queryKey: ['member-pt-bookings'] })
       queryClient.invalidateQueries({ queryKey: ['member-pt-data'] })
+      queryClient.invalidateQueries({ queryKey: ['available-slots'] })
       form.reset()
       onOpenChange(false)
     },
     onError: () => toast.error('Failed to book session. Please try again.'),
   })
+
+  const minDate = new Date().toISOString().slice(0, 10)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -165,26 +184,9 @@ function BookingSheet({
           <Form {...form}>
             <form
               onSubmit={form.handleSubmit((d) => mutation.mutate(d))}
-              className="space-y-4"
+              className="space-y-5"
             >
-              <FormField
-                control={form.control}
-                name="scheduled_at"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Date & Time</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="datetime-local"
-                        min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
+              {/* Duration */}
               <FormField
                 control={form.control}
                 name="duration_minutes"
@@ -192,7 +194,10 @@ function BookingSheet({
                   <FormItem>
                     <FormLabel>Duration</FormLabel>
                     <Select
-                      onValueChange={(v) => field.onChange(Number(v))}
+                      onValueChange={(v) => {
+                        field.onChange(Number(v))
+                        form.setValue('scheduled_at', '')
+                      }}
                       defaultValue={String(field.value)}
                     >
                       <FormControl>
@@ -212,6 +217,79 @@ function BookingSheet({
                 )}
               />
 
+              {/* Date picker */}
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      <Calendar className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
+                      Date
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        min={minDate}
+                        {...field}
+                        onChange={(e) => {
+                          field.onChange(e)
+                          form.setValue('scheduled_at', '')
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Available time slots */}
+              {watchDate && (
+                <FormField
+                  control={form.control}
+                  name="scheduled_at"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        <Clock className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
+                        Available Times
+                      </FormLabel>
+                      {slotsLoading ? (
+                        <div className="grid grid-cols-3 gap-2 mt-1">
+                          {[...Array(6)].map((_, i) => (
+                            <Skeleton key={i} className="h-9 rounded-md" />
+                          ))}
+                        </div>
+                      ) : slots.length === 0 ? (
+                        <p className="text-sm text-muted-foreground mt-1 py-3 text-center border rounded-md">
+                          No availability on {SESSION_DAYS[new Date(watchDate + 'T12:00:00').getDay()]}s — try another date.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-2 mt-1">
+                          {slots.map((s) => (
+                            <button
+                              key={s.time}
+                              type="button"
+                              onClick={() => field.onChange(s.time)}
+                              className={cn(
+                                'px-2 py-2 rounded-md text-sm border transition-colors',
+                                field.value === s.time
+                                  ? 'bg-primary text-primary-foreground border-primary font-medium'
+                                  : 'border-input hover:bg-accent hover:text-accent-foreground'
+                              )}
+                            >
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* Notes */}
               <FormField
                 control={form.control}
                 name="notes"
@@ -220,7 +298,7 @@ function BookingSheet({
                     <FormLabel>Notes (optional)</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Session goals or any notes for your trainer..."
+                        placeholder="Session goals or any notes for your trainer…"
                         {...field}
                       />
                     </FormControl>
@@ -232,7 +310,7 @@ function BookingSheet({
               <Button
                 type="submit"
                 className="w-full"
-                disabled={mutation.isPending}
+                disabled={mutation.isPending || !watchSlot}
               >
                 {mutation.isPending ? 'Booking…' : 'Confirm Booking'}
               </Button>
@@ -243,6 +321,8 @@ function BookingSheet({
     </Sheet>
   )
 }
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PTBookingPage() {
   const { user } = useAuth()
@@ -267,7 +347,7 @@ export default function PTBookingPage() {
   })
 
   const trainer = ptData?.assignedTrainer ?? null
-  const ptMem = ptData?.ptMembership ?? null
+  const ptMem   = ptData?.ptMembership ?? null
   const canBook =
     trainer !== null &&
     trainer.status === 'active' &&
@@ -408,9 +488,7 @@ export default function PTBookingPage() {
                         <span className="text-muted-foreground">Status</span>
                         <Badge
                           variant={
-                            ptMem.pt_sessions_status === 'active'
-                              ? 'default'
-                              : 'destructive'
+                            ptMem.pt_sessions_status === 'active' ? 'default' : 'destructive'
                           }
                           className="text-xs capitalize"
                         >
@@ -442,6 +520,7 @@ export default function PTBookingPage() {
           open={sheetOpen}
           onOpenChange={setSheetOpen}
           trainerName={trainer.trainer_name}
+          trainerId={trainer.trainer_id}
         />
       )}
     </div>

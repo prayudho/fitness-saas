@@ -9,7 +9,9 @@ import {
   updateTrainer,
   setTrainerAvailability,
   getTrainerAvailability,
+  getAvailableSlots,
   createSession,
+  bookSessionByTrainer,
   updateSessionStatus,
   getTrainerSessions,
   getMemberPTBookings,
@@ -162,5 +164,41 @@ export function useMemberPTBookings(memberId: string) {
       return result.data
     },
     enabled: Boolean(memberId),
+  })
+}
+
+export function useAvailableSlots(
+  trainerId: string,
+  dateStr: string,
+  durationMinutes: number
+) {
+  return useQuery({
+    queryKey: ['available-slots', trainerId, dateStr, durationMinutes],
+    queryFn: async () => {
+      const result = await getAvailableSlots(trainerId, dateStr, durationMinutes)
+      if (result.error) throw new Error(result.error)
+      return result.data ?? []
+    },
+    enabled: Boolean(trainerId) && Boolean(dateStr),
+    staleTime: 30_000,
+  })
+}
+
+export function useBookSessionByTrainer() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: Parameters<typeof bookSessionByTrainer>[0]) => {
+      const r = await bookSessionByTrainer(input)
+      if (r.error) throw new Error(r.error)
+      return r.data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trainer-sessions'] })
+      qc.invalidateQueries({ queryKey: ['trainer-clients'] })
+      qc.invalidateQueries({ queryKey: ['member-pt-bookings'] })
+      qc.invalidateQueries({ queryKey: ['available-slots'] })
+      toast.success('Session booked successfully')
+    },
+    onError: (e: Error) => toast.error(e.message),
   })
 }
