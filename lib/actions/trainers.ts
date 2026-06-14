@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getAuthedProfile } from '@/lib/actions/utils'
 import type { Database } from '@/types/database'
@@ -515,7 +515,7 @@ export async function getMemberPTBookings(
         *,
         trainer:trainers!trainer_sessions_trainer_id_fkey (
           *,
-          profiles!trainers_id_brand_fkey (id, full_name, avatar_url)
+          profiles!trainers_id_fkey (id, full_name, avatar_url)
         )
       `)
       .eq('member_id', memberId)
@@ -526,5 +526,172 @@ export async function getMemberPTBookings(
     return { data: (data ?? []) as TrainerSessionWithTrainer[] }
   } catch (e) {
     return { data: [], error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Member-initiated PT booking
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type MemberPTData = {
+  assignedTrainer: {
+    assignment_id: string
+    trainer_id: string
+    trainer_name: string
+    trainer_avatar_url: string | null
+    specialties: string[] | null
+    bio: string | null
+    status: string
+  } | null
+  ptMembership: {
+    id: string
+    package_name: string
+    pt_sessions_remaining: number | null
+    pt_sessions_expires_at: string | null
+    pt_sessions_status: string | null
+  } | null
+}
+
+export async function getMemberPTData(): Promise<{ data: MemberPTData | null; error?: string }> {
+  try {
+    const supabase = createClient()
+    const { profile } = await getAuthedProfile(supabase)
+    if (!profile.brand_id) return { data: null, error: 'No brand context' }
+
+    // Find active PT assignment for this member
+    const { data: assignment } = await supabase
+      .from('pt_assignments')
+      .select('id, trainer_id, membership_id, status')
+      .eq('member_id', profile.id)
+      .eq('brand_id', profile.brand_id)
+      .in('status', ['active', 'grace_period'])
+      .order('assigned_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!assignment) return { data: { assignedTrainer: null, ptMembership: null } }
+
+    // Fetch trainer profile and membership in parallel
+    const [trainerRes, membershipRes] = await Promise.all([
+      supabase
+        .from('trainers')
+        .select('id, bio, specialties, profiles!trainers_id_fkey(full_name, avatar_url)')
+        .eq('id', assignment.trainer_id)
+        .maybeSingle(),
+      supabase
+        .from('memberships')
+        .select('id, pt_sessions_remaining, pt_sessions_expires_at, pt_sessions_status, membership_packages(name)')
+        .eq('id', assignment.membership_id)
+        .maybeSingle(),
+    ])
+
+    type TrainerProfileRow = { full_name: string | null; avatar_url: string | null }
+    type TrainerResult = { id: string; bio: string | null; specialties: string[] | null; profiles: TrainerProfileRow | null }
+    type MembershipResult = { id: string; pt_sessions_remaining: number | null; pt_sessions_expires_at: string | null; pt_sessions_status: string | null; membership_packages: { name: string } | null }
+
+    const trainer = trainerRes.data as TrainerResult | null
+    const membership = membershipRes.data as MembershipResult | null
+    const trainerProfile = trainer?.profiles as TrainerProfileRow | null
+
+    return {
+      data: {
+        assignedTrainer: {
+          assignment_id: assignment.id,
+          trainer_id: assignment.trainer_id,
+          trainer_name: trainerProfile?.full_name ?? 'Your Trainer',
+          trainer_avatar_url: trainerProfile?.avatar_url ?? null,
+          specialties: trainer?.specialties ?? null,
+          bio: trainer?.bio ?? null,
+          status: assignment.status,
+        },
+        ptMembership: membership
+          ? {
+              id: membership.id,
+              package_name: membership.membership_packages?.name ?? 'PT Package',
+              pt_sessions_remaining: membership.pt_sessions_remaining,
+              pt_sessions_expires_at: membership.pt_sessions_expires_at,
+              pt_sessions_status: membership.pt_sessions_status,
+            }
+          : null,
+      },
+    }
+  } catch (e) {
+    return { data: null, error: e instanceof Error ? e.message : 'An error occurred' }
+  }
+}
+
+export async function bookMemberPTSession(input: {
+  scheduled_at: string
+  duration_minutes?: number
+  notes?: string
+}): Promise<{ data?: { id: string }; error?: string }> {
+  try {
+    const supabase = createClient()
+    const { profile } = await getAuthedProfile(supabase)
+    if (!profile.brand_id) return { error: 'No brand context' }
+
+    // Find the active PT assignment
+    const { data: assignment } = await supabase
+      .from('pt_assignments')
+      .select('id, trainer_id, membership_id, status')
+      .eq('member_id', profile.id)
+      .eq('brand_id', profile.brand_id)
+      .in('status', ['active', 'grace_period'])
+      .order('assigned_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!assignment) return { error: 'No active PT trainer assigned. Contact your gym.' }
+
+    // Validate sessions remaining
+    const { data: membership } = await supabase
+      .from('memberships')
+      .select('id, pt_sessions_remaining, pt_sessions_status')
+      .eq('id', assignment.membership_id)
+      .maybeSingle()
+
+    if (!membership) return { error: 'PT membership not found.' }
+    if ((membership.pt_sessions_remaining ?? 0) <= 0)
+      return { error: 'No PT sessions remaining on your package.' }
+    if (membership.pt_sessions_status === 'exhausted')
+      return { error: 'Your PT sessions have been exhausted.' }
+    if (membership.pt_sessions_status === 'expired')
+      return { error: 'Your PT sessions have expired.' }
+
+    // Use service client to bypass tsessions_write RLS (members can't insert directly)
+    const serviceClient = createServiceClient()
+
+    const { data: session, error: insertErr } = await serviceClient
+      .from('trainer_sessions')
+      .insert({
+        brand_id: profile.brand_id,
+        trainer_id: assignment.trainer_id,
+        member_id: profile.id,
+        pt_assignment_id: assignment.id,
+        scheduled_at: input.scheduled_at,
+        duration_minutes: input.duration_minutes ?? 60,
+        notes: input.notes ?? null,
+        status: 'scheduled',
+        session_fee: null,
+      })
+      .select('id')
+      .single()
+
+    if (insertErr) throw insertErr
+
+    // Decrement pt_sessions_remaining
+    await serviceClient
+      .from('memberships')
+      .update({ pt_sessions_remaining: (membership.pt_sessions_remaining ?? 1) - 1 })
+      .eq('id', membership.id)
+
+    revalidatePath('/member/pt-booking')
+    revalidatePath('/member')
+    revalidatePath('/trainer/schedule')
+    revalidatePath('/trainer/sessions')
+
+    return { data: { id: session.id } }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'An error occurred' }
   }
 }
