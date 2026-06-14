@@ -39,6 +39,7 @@ import {
   useCreateInvoice,
   useProcessRefund,
   useGetMidtransToken,
+  useCancelPendingPackage,
 } from '@/lib/hooks/use-billing'
 import { useMembers } from '@/lib/hooks/use-members'
 import { formatCurrency } from '@/lib/utils'
@@ -65,6 +66,7 @@ export default function AdminBillingPage() {
   const createMutation = useCreateInvoice()
   const refundMutation = useProcessRefund()
   const midtransMutation = useGetMidtransToken()
+  const cancelMutation = useCancelPendingPackage()
 
   const invoices = data?.data ?? []
   const members = membersData?.data ?? []
@@ -117,10 +119,15 @@ export default function AdminBillingPage() {
     await refundMutation.mutateAsync({ invoiceId, reason })
   }
 
+  async function handleCancel(membershipId: string) {
+    await cancelMutation.mutateAsync(membershipId)
+  }
+
   const columns = getInvoiceColumns({
     onRecordPayment: (invoice) => setRecordPaymentInvoice(invoice),
     onRefund: handleRefund,
     onPay: handlePayMidtrans,
+    onCancel: handleCancel,
   })
 
   return (

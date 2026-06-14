@@ -19,6 +19,7 @@ interface InvoiceColumnHandlers {
   onRecordPayment?: (invoice: InvoiceWithDetails) => void
   onRefund?: (id: string) => void
   onPay?: (id: string) => void
+  onCancel?: (membershipId: string) => void
 }
 
 export function getInvoiceColumns(
@@ -102,6 +103,14 @@ export function getInvoiceColumns(
               {status === 'pending' && handlers.onPay && (
                 <DropdownMenuItem onClick={() => handlers.onPay!(invoice.id)}>
                   Pay via Midtrans
+                </DropdownMenuItem>
+              )}
+              {status === 'pending' && invoice.memberships?.id && handlers.onCancel && (
+                <DropdownMenuItem
+                  onClick={() => handlers.onCancel!(invoice.memberships!.id)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  Cancel Package
                 </DropdownMenuItem>
               )}
               {status === 'paid' && handlers.onRefund && (

@@ -32,6 +32,7 @@ function getStatusColor(status: string): string {
 
     case 'frozen':
     case 'pending':
+    case 'pending_payment':
     case 'scheduled':
     case 'booked':
     case 'waitlisted':

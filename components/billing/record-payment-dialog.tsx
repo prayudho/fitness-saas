@@ -14,6 +14,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -26,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/utils'
@@ -33,6 +35,7 @@ import { useRecordPayment } from '@/lib/hooks/use-billing'
 
 const schema = z.object({
   payment_method: z.enum(['cash', 'transfer'], { required_error: 'Select a payment method' }),
+  reference_number: z.string().optional(),
   notes: z.string().optional(),
 })
 
@@ -59,7 +62,7 @@ export function RecordPaymentDialog({
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { notes: '' },
+    defaultValues: { reference_number: '', notes: '' },
   })
 
   async function onSubmit(data: FormData) {
@@ -67,6 +70,7 @@ export function RecordPaymentDialog({
       invoiceId,
       input: {
         payment_method: data.payment_method,
+        reference_number: data.reference_number || undefined,
         notes: data.notes || undefined,
       },
     })
@@ -106,6 +110,21 @@ export function RecordPaymentDialog({
                       <SelectItem value="transfer">Bank Transfer</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="reference_number"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Reference Number (optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Bank transfer ref / receipt no." {...field} />
+                  </FormControl>
+                  <FormDescription>For bank transfer, enter the transfer reference number.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

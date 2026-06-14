@@ -9,6 +9,7 @@ import {
   recordPayment,
   getMidtransSnapToken,
   processRefund,
+  cancelPendingPackage,
 } from '@/lib/actions/billing'
 
 export function useInvoices(filters?: { status?: string; page?: number; limit?: number }) {
@@ -92,6 +93,19 @@ export function useProcessRefund() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoices'] })
       toast.success('Invoice refunded successfully')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+export function useCancelPendingPackage() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (membershipId: string) => cancelPendingPackage(membershipId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['members'] })
+      toast.success('Package cancelled and invoice deleted')
     },
     onError: (e: Error) => toast.error(e.message),
   })

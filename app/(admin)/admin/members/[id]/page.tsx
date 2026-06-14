@@ -12,6 +12,7 @@ import { formatDate, formatCurrency } from '@/lib/utils'
 import { ArrowLeft, Pencil, Phone, Calendar, Shield, User } from 'lucide-react'
 import { ResetPasswordDialog } from '@/components/members/reset-password-dialog'
 import { PTAssignmentCard } from '@/components/pt-assignment/pt-assignment-card'
+import { MemberInvoicesTab } from '@/components/members/member-invoices-tab'
 
 interface PageProps {
   params: { id: string }
@@ -186,40 +187,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
                   <CardTitle className="text-base">Invoices</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {member.invoices.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center">No invoices yet.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b text-left">
-                            <th className="pb-2 pr-4 font-medium text-muted-foreground">Date</th>
-                            <th className="pb-2 pr-4 font-medium text-muted-foreground">Amount</th>
-                            <th className="pb-2 pr-4 font-medium text-muted-foreground">Status</th>
-                            <th className="pb-2 font-medium text-muted-foreground">Paid At</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {member.invoices.map((inv) => (
-                            <tr key={inv.id}>
-                              <td className="py-2.5 pr-4 text-muted-foreground">
-                                {formatDate(inv.created_at)}
-                              </td>
-                              <td className="py-2.5 pr-4 font-medium">
-                                {formatCurrency(inv.amount, inv.currency)}
-                              </td>
-                              <td className="py-2.5 pr-4">
-                                <StatusBadge status={inv.status} />
-                              </td>
-                              <td className="py-2.5 text-muted-foreground">
-                                {inv.paid_at ? formatDate(inv.paid_at) : '—'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                  <MemberInvoicesTab invoices={member.invoices} />
                 </CardContent>
               </Card>
             </TabsContent>

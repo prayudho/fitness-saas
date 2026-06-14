@@ -352,75 +352,6 @@ export async function assignPackage(input: {
       promoCodeId = promo.id
     }
 
-    // ── PT-sessions stacking ────────────────────────────────────────────────
-    // When assigning a pure pt_sessions package and the member already has an
-    // active PT membership, add the new credits onto that membership instead of
-    // creating a separate row. The expiry is extended to whichever date is later.
-    if (category === 'pt_sessions') {
-      const { data: existingPT } = await supabase
-        .from('memberships')
-        .select('id, pt_sessions_remaining, pt_sessions_expires_at')
-        .eq('brand_id', profile.brand_id)
-        .eq('member_id', input.member_id)
-        .eq('pt_sessions_status', 'active')
-        .not('pt_sessions_remaining', 'is', null)
-        .order('pt_sessions_expires_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (existingPT) {
-        const addedCredits  = pkg.pt_session_credits ?? 0
-        const newCredits    = (existingPT.pt_sessions_remaining ?? 0) + addedCredits
-
-        const existingExpMs = existingPT.pt_sessions_expires_at
-          ? new Date(existingPT.pt_sessions_expires_at).getTime() : 0
-        const newPurchaseExpMs = ptSessionsExpiresAt
-          ? new Date(ptSessionsExpiresAt).getTime() : 0
-        const extendedExpiresAt = newPurchaseExpMs > existingExpMs
-          ? ptSessionsExpiresAt
-          : existingPT.pt_sessions_expires_at
-
-        await supabase
-          .from('memberships')
-          .update({
-            pt_sessions_remaining:  newCredits,
-            pt_sessions_expires_at: extendedExpiresAt,
-            expires_at:             extendedExpiresAt,
-          } as never)
-          .eq('id', existingPT.id)
-
-        const { data: invoice, error: invoiceError } = await supabase
-          .from('invoices')
-          .insert({
-            brand_id:      profile.brand_id,
-            member_id:     input.member_id,
-            membership_id: existingPT.id,
-            amount:        finalAmount,
-            currency:      pkg.currency,
-            status:        'pending',
-            notes:         promoCodeId
-              ? `Stacked onto existing membership (${addedCredits} sessions added) — promo applied`
-              : `Stacked onto existing membership (+${addedCredits} sessions)`,
-          })
-          .select()
-          .single()
-
-        if (invoiceError || !invoice) return { error: invoiceError?.message ?? 'Failed to create invoice' }
-
-        if (promoCodeId) {
-          const { data: cp } = await supabase.from('promo_codes').select('used_count').eq('id', promoCodeId).single()
-          if (cp) await supabase.from('promo_codes').update({ used_count: cp.used_count + 1 }).eq('id', promoCodeId)
-        }
-
-        const { data: updatedMembership } = await supabase
-          .from('memberships').select('*').eq('id', existingPT.id).single()
-
-        revalidatePath('/admin/members')
-        revalidatePath(`/admin/members/${input.member_id}`)
-        return { data: { membership: updatedMembership as MembershipRow, invoice } }
-      }
-    }
-
     // ── Normal flow: create a new membership ─────────────────────────────────
     const { data: membership, error: membershipError } = await supabase
       .from('memberships')
@@ -428,7 +359,7 @@ export async function assignPackage(input: {
         brand_id:              profile.brand_id,
         member_id:             input.member_id,
         package_id:            input.package_id,
-        status:                'active',
+        status:                'pending_payment' as never,
         starts_at:             input.starts_at,
         expires_at:            expiresAt,
         sessions_remaining:    pkg.session_credits ?? ptSessionsRemaining,
