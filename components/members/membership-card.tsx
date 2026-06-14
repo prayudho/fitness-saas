@@ -128,17 +128,20 @@ export function MembershipCard({ membership, onRefresh }: MembershipCardProps) {
               </Button>
             )}
 
-            <ConfirmDialog
-              title="Cancel Membership"
-              description="Are you sure you want to cancel this membership? This action cannot be undone."
-              onConfirm={handleCancel}
-              isPending={cancel.isPending}
-              variant="destructive"
-            >
-              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
-                Cancel Membership
-              </Button>
-            </ConfirmDialog>
+            {/* Cancel only available before payment — paid memberships must go through billing refund */}
+            {(membership.status as string) === 'pending_payment' && (
+              <ConfirmDialog
+                title="Cancel Membership"
+                description="This will permanently delete this membership and all linked unpaid invoices. This cannot be undone."
+                onConfirm={handleCancel}
+                isPending={cancel.isPending}
+                variant="destructive"
+              >
+                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                  Cancel Membership
+                </Button>
+              </ConfirmDialog>
+            )}
           </div>
         )}
       </CardContent>

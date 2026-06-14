@@ -311,13 +311,27 @@ export async function processRefund(
 
     const { data: existing, error: fetchError } = await supabase
       .from('invoices')
-      .select('notes, status, membership_id')
+      .select('notes, status, membership_id, paid_at')
       .eq('id', invoiceId)
       .eq('brand_id', profile.brand_id)
       .single()
 
     if (fetchError || !existing) return { error: fetchError?.message ?? 'Invoice not found' }
     if (existing.status !== 'paid') return { error: 'Only paid invoices can be refunded' }
+
+    // Enforce per-brand refund window
+    const { data: brand } = await supabase
+      .from('brands')
+      .select('refund_window_days')
+      .eq('id', profile.brand_id)
+      .single()
+
+    const windowDays = (brand as { refund_window_days?: number } | null)?.refund_window_days ?? 1
+    const paidAt = existing.paid_at ? new Date(existing.paid_at).getTime() : 0
+    const windowMs = windowDays * 24 * 60 * 60 * 1000
+    if (Date.now() - paidAt > windowMs) {
+      return { error: `Refund window has expired (${windowDays} day${windowDays !== 1 ? 's' : ''} after payment)` }
+    }
 
     const updatedNotes = existing.notes
       ? `${existing.notes}\nRefund reason: ${reason}`
@@ -376,8 +390,7 @@ export async function cancelPendingPackage(
 
     if (invErr) return { error: invErr.message }
 
-    // If the linked membership is pending_payment, delete it too (new flow)
-    // Active memberships (created before this feature) are left intact
+    // If the linked membership is pending_payment, delete it + any remaining pending invoices
     if (inv.membership_id) {
       const { data: mem } = await supabase
         .from('memberships')
@@ -387,6 +400,14 @@ export async function cancelPendingPackage(
         .maybeSingle()
 
       if (mem && (mem.status as string) === 'pending_payment') {
+        // Delete any other pending invoices linked to the same membership
+        await supabase
+          .from('invoices')
+          .delete()
+          .eq('membership_id', mem.id)
+          .eq('brand_id', profile.brand_id)
+          .eq('status', 'pending')
+
         await supabase
           .from('memberships')
           .delete()

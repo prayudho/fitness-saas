@@ -256,14 +256,39 @@ export async function cancelMembership(membershipId: string): Promise<{ error?: 
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
 
-    const { error } = await supabase
+    const { data: mem } = await supabase
       .from('memberships')
-      .update({ status: 'cancelled' })
+      .select('id, status')
       .eq('id', membershipId)
+      .eq('brand_id', profile.brand_id)
+      .single()
 
-    if (error) return { error: error.message }
+    if (!mem) return { error: 'Membership not found' }
+    if ((mem.status as string) !== 'pending_payment') {
+      return { error: 'Only unpaid memberships can be cancelled from here' }
+    }
+
+    // Hard-delete all pending invoices linked to this membership
+    const { error: invErr } = await supabase
+      .from('invoices')
+      .delete()
+      .eq('membership_id', membershipId)
+      .eq('brand_id', profile.brand_id)
+      .eq('status', 'pending')
+
+    if (invErr) return { error: invErr.message }
+
+    // Hard-delete the membership
+    const { error: memErr } = await supabase
+      .from('memberships')
+      .delete()
+      .eq('id', membershipId)
+      .eq('brand_id', profile.brand_id)
+
+    if (memErr) return { error: memErr.message }
 
     revalidatePath('/admin/members')
+    revalidatePath('/admin/billing')
     return {}
   } catch (e) {
     return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }

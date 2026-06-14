@@ -42,6 +42,8 @@ import {
   useCancelPendingPackage,
 } from '@/lib/hooks/use-billing'
 import { useMembers } from '@/lib/hooks/use-members'
+import { useQuery } from '@tanstack/react-query'
+import { getBrandSettings } from '@/lib/actions/settings'
 import { formatCurrency } from '@/lib/utils'
 import type { InvoiceWithDetails } from '@/lib/actions/billing'
 import { toast } from 'sonner'
@@ -63,10 +65,18 @@ export default function AdminBillingPage() {
 
   const { data, isLoading } = useInvoices({ status: statusFilter })
   const { data: membersData } = useMembers()
+  const { data: brandSettings } = useQuery({
+    queryKey: ['brand-settings'],
+    queryFn: async () => {
+      const r = await getBrandSettings()
+      return r.data
+    },
+  })
   const createMutation = useCreateInvoice()
   const refundMutation = useProcessRefund()
   const midtransMutation = useGetMidtransToken()
   const cancelMutation = useCancelPendingPackage()
+  const refundWindowDays = (brandSettings as { refund_window_days?: number } | null)?.refund_window_days ?? 1
 
   const invoices = data?.data ?? []
   const members = membersData?.data ?? []
@@ -128,6 +138,7 @@ export default function AdminBillingPage() {
     onRefund: handleRefund,
     onPay: handlePayMidtrans,
     onCancel: handleCancel,
+    refundWindowDays,
   })
 
   return (

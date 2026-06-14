@@ -20,6 +20,7 @@ interface InvoiceColumnHandlers {
   onRefund?: (id: string) => void
   onPay?: (id: string) => void
   onCancel?: (invoiceId: string) => void
+  refundWindowDays?: number
 }
 
 export function getInvoiceColumns(
@@ -85,6 +86,11 @@ export function getInvoiceColumns(
       cell: ({ row }) => {
         const invoice = row.original
         const status = invoice.status
+        const withinRefundWindow = (() => {
+          if (!invoice.paid_at || !handlers.refundWindowDays) return true
+          const windowMs = handlers.refundWindowDays * 24 * 60 * 60 * 1000
+          return Date.now() - new Date(invoice.paid_at).getTime() <= windowMs
+        })()
 
         return (
           <DropdownMenu>
@@ -113,7 +119,7 @@ export function getInvoiceColumns(
                   Cancel Package
                 </DropdownMenuItem>
               )}
-              {status === 'paid' && handlers.onRefund && (
+              {status === 'paid' && handlers.onRefund && withinRefundWindow && (
                 <DropdownMenuItem
                   onClick={() => handlers.onRefund!(invoice.id)}
                   className="text-destructive focus:text-destructive"
