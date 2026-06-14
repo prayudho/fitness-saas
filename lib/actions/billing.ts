@@ -47,9 +47,6 @@ export async function getInvoices(filters?: {
 
     if (filters?.status && filters.status !== 'all') {
       query = query.eq('status', filters.status)
-    } else {
-      // Hide cancelled invoices from the default all-invoices view
-      query = query.neq('status', 'cancelled')
     }
 
     const { data: rawData, error, count } = await query
