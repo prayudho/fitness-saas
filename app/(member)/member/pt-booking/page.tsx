@@ -50,7 +50,10 @@ import { useAuth } from '@/lib/hooks/use-auth'
 import { formatDate, formatCurrency } from '@/lib/utils'
 
 const bookingSchema = z.object({
-  scheduled_at: z.string().min(1, 'Please select a date and time'),
+  scheduled_at: z.string().min(1, 'Please select a date and time').refine(
+    (val) => new Date(val) > new Date(),
+    'Session must be scheduled in the future'
+  ),
   duration_minutes: z.coerce.number().min(15),
   notes: z.string().optional(),
 })
@@ -171,7 +174,11 @@ function BookingSheet({
                   <FormItem>
                     <FormLabel>Date & Time</FormLabel>
                     <FormControl>
-                      <Input type="datetime-local" {...field} />
+                      <Input
+                        type="datetime-local"
+                        min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -263,6 +270,7 @@ export default function PTBookingPage() {
   const ptMem = ptData?.ptMembership ?? null
   const canBook =
     trainer !== null &&
+    trainer.status === 'active' &&
     (ptMem?.pt_sessions_remaining ?? 0) > 0 &&
     ptMem?.pt_sessions_status === 'active'
 
@@ -357,7 +365,9 @@ export default function PTBookingPage() {
 
                   {!canBook && trainer && (
                     <p className="text-xs text-muted-foreground text-center mt-2">
-                      {(ptMem?.pt_sessions_remaining ?? 0) <= 0
+                      {trainer.status === 'grace_period'
+                        ? 'New bookings are paused — your trainer assignment is ending. Contact your gym.'
+                        : (ptMem?.pt_sessions_remaining ?? 0) <= 0
                         ? 'No sessions remaining on your package.'
                         : ptMem?.pt_sessions_status !== 'active'
                         ? 'Your PT sessions are no longer active.'

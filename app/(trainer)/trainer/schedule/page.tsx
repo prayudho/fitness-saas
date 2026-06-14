@@ -15,11 +15,19 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Clock, Calendar, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { Clock, Calendar, CheckCircle, XCircle, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTrainerSessions, useUpdateSessionStatus } from '@/lib/hooks/use-trainers'
 import { useAuth } from '@/lib/hooks/use-auth'
 import type { TrainerSessionWithMember } from '@/lib/actions/trainers'
 import { formatCurrency, formatDate } from '@/lib/utils'
+
+function monthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+function monthLabel(date: Date) {
+  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
 
 function SessionCard({ session }: { session: TrainerSessionWithMember }) {
   const mutation = useUpdateSessionStatus()
@@ -155,7 +163,10 @@ function SessionCard({ session }: { session: TrainerSessionWithMember }) {
 
 export default function TrainerSchedulePage() {
   const { user } = useAuth()
-  const { data: sessions, isLoading } = useTrainerSessions(user?.id ?? '')
+  const [monthDate, setMonthDate] = useState(() => new Date())
+  const month = monthKey(monthDate)
+
+  const { data: sessions, isLoading } = useTrainerSessions(user?.id ?? '', { month })
 
   const upcoming = (sessions ?? [])
     .filter((s) => s.status === 'scheduled')
@@ -164,7 +175,14 @@ export default function TrainerSchedulePage() {
   const past = (sessions ?? [])
     .filter((s) => s.status !== 'scheduled')
     .sort((a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime())
-    .slice(0, 10)
+
+  function prevMonth() {
+    setMonthDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))
+  }
+  function nextMonth() {
+    setMonthDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))
+  }
+  const isCurrentMonth = monthKey(new Date()) === month
 
   return (
     <div className="space-y-6">
@@ -172,6 +190,17 @@ export default function TrainerSchedulePage() {
         title="My Schedule"
         description="View and manage your upcoming training sessions"
       />
+
+      {/* Month navigation */}
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="icon" onClick={prevMonth}>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="font-medium text-sm w-36 text-center">{monthLabel(monthDate)}</span>
+        <Button variant="outline" size="icon" onClick={nextMonth} disabled={isCurrentMonth}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
 
       <div className="space-y-4">
         <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
@@ -201,7 +230,7 @@ export default function TrainerSchedulePage() {
       {past.length > 0 && (
         <div className="space-y-4">
           <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-            Recent Sessions
+            Completed / Cancelled
           </h3>
           <div className="space-y-3">
             {past.map((session) => (

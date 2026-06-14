@@ -703,6 +703,12 @@ export async function bookMemberPTSession(input: {
       .maybeSingle()
 
     if (!assignment) return { error: 'No active PT trainer assigned. Contact your gym.' }
+    if (assignment.status === 'grace_period')
+      return { error: 'New bookings are paused — your trainer assignment is ending. Contact your gym.' }
+
+    // Reject bookings in the past
+    if (new Date(input.scheduled_at) <= new Date())
+      return { error: 'Session must be scheduled in the future.' }
 
     // Validate sessions remaining
     const { data: membership } = await supabase
@@ -718,6 +724,20 @@ export async function bookMemberPTSession(input: {
       return { error: 'Your PT sessions have been exhausted.' }
     if (membership.pt_sessions_status === 'expired')
       return { error: 'Your PT sessions have expired.' }
+
+    // Reject if trainer already has a session starting within the new session's window
+    const newStart = new Date(input.scheduled_at)
+    const newEnd   = new Date(newStart.getTime() + (input.duration_minutes ?? 60) * 60000)
+    const { count: conflict } = await supabase
+      .from('trainer_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('trainer_id', assignment.trainer_id)
+      .eq('brand_id', profile.brand_id)
+      .eq('status', 'scheduled')
+      .gte('scheduled_at', newStart.toISOString())
+      .lt('scheduled_at', newEnd.toISOString())
+    if ((conflict ?? 0) > 0)
+      return { error: 'Your trainer already has a session scheduled at that time.' }
 
     // Use service client to bypass tsessions_write RLS (members can't insert directly)
     const serviceClient = createServiceClient()
