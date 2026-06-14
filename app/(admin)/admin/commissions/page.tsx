@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { createClient } from '@/lib/supabase/browser'
+import { createClient } from '@/lib/supabase/client'
 import {
   listCommissions,
   approveCommission,

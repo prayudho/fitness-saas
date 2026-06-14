@@ -31,7 +31,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { useAssignPT, useReassignPT, useReleasePT } from '@/lib/hooks/use-pt-assignments'
 import { useTrainers } from '@/lib/hooks/use-trainers'
-import { createClient } from '@/lib/supabase/browser'
+import { createClient } from '@/lib/supabase/client'
 
 const schema = z.object({
   trainer_id: z.string().min(1, 'Please select a trainer'),
