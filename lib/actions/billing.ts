@@ -349,43 +349,51 @@ export async function processRefund(
 }
 
 export async function cancelPendingPackage(
-  membershipId: string
+  invoiceId: string
 ): Promise<{ error?: string }> {
   try {
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
 
-    const { data: mem } = await supabase
-      .from('memberships')
-      .select('id, status')
-      .eq('id', membershipId)
+    // Fetch the invoice and verify it is still pending
+    const { data: inv } = await supabase
+      .from('invoices')
+      .select('id, status, membership_id')
+      .eq('id', invoiceId)
       .eq('brand_id', profile.brand_id)
       .single()
 
-    if (!mem) return { error: 'Membership not found' }
-    if ((mem.status as string) !== 'pending_payment') {
-      return { error: 'Only memberships pending payment can be cancelled this way' }
-    }
+    if (!inv) return { error: 'Invoice not found' }
+    if (inv.status !== 'pending') return { error: 'Only pending invoices can be cancelled' }
 
-    // Hard-delete the pending invoice(s) first
+    // Hard-delete the invoice
     const { error: invErr } = await supabase
       .from('invoices')
       .delete()
-      .eq('membership_id', membershipId)
+      .eq('id', invoiceId)
       .eq('brand_id', profile.brand_id)
-      .eq('status', 'pending')
 
     if (invErr) return { error: invErr.message }
 
-    // Hard-delete the membership
-    const { error: memErr } = await supabase
-      .from('memberships')
-      .delete()
-      .eq('id', membershipId)
-      .eq('brand_id', profile.brand_id)
+    // If the linked membership is pending_payment, delete it too (new flow)
+    // Active memberships (created before this feature) are left intact
+    if (inv.membership_id) {
+      const { data: mem } = await supabase
+        .from('memberships')
+        .select('id, status')
+        .eq('id', inv.membership_id)
+        .eq('brand_id', profile.brand_id)
+        .maybeSingle()
 
-    if (memErr) return { error: memErr.message }
+      if (mem && (mem.status as string) === 'pending_payment') {
+        await supabase
+          .from('memberships')
+          .delete()
+          .eq('id', mem.id)
+          .eq('brand_id', profile.brand_id)
+      }
+    }
 
     revalidatePath('/admin/billing')
     revalidatePath('/admin/members')

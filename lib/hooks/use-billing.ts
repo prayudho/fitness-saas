@@ -101,7 +101,10 @@ export function useProcessRefund() {
 export function useCancelPendingPackage() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (membershipId: string) => cancelPendingPackage(membershipId),
+    mutationFn: async (invoiceId: string) => {
+      const result = await cancelPendingPackage(invoiceId)
+      if (result.error) throw new Error(result.error)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoices'] })
       qc.invalidateQueries({ queryKey: ['members'] })

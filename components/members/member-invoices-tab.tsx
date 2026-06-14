@@ -29,7 +29,10 @@ export function MemberInvoicesTab({ invoices }: MemberInvoicesTabProps) {
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null)
 
   const cancelMutation = useMutation({
-    mutationFn: (membershipId: string) => cancelPendingPackage(membershipId),
+    mutationFn: async (invoiceId: string) => {
+      const result = await cancelPendingPackage(invoiceId)
+      if (result.error) throw new Error(result.error)
+    },
     onSuccess: () => {
       toast.success('Package and invoice cancelled')
       router.refresh()
@@ -75,7 +78,7 @@ export function MemberInvoicesTab({ invoices }: MemberInvoicesTabProps) {
                           variant="ghost"
                           className="text-destructive hover:text-destructive"
                           disabled={cancelMutation.isPending}
-                          onClick={() => cancelMutation.mutate(inv.membership_id!)}
+                          onClick={() => cancelMutation.mutate(inv.id)}
                         >
                           Cancel
                         </Button>

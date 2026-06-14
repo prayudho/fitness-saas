@@ -19,7 +19,7 @@ interface InvoiceColumnHandlers {
   onRecordPayment?: (invoice: InvoiceWithDetails) => void
   onRefund?: (id: string) => void
   onPay?: (id: string) => void
-  onCancel?: (membershipId: string) => void
+  onCancel?: (invoiceId: string) => void
 }
 
 export function getInvoiceColumns(
@@ -105,9 +105,9 @@ export function getInvoiceColumns(
                   Pay via Midtrans
                 </DropdownMenuItem>
               )}
-              {status === 'pending' && invoice.memberships?.id && handlers.onCancel && (
+              {status === 'pending' && handlers.onCancel && (
                 <DropdownMenuItem
-                  onClick={() => handlers.onCancel!(invoice.memberships!.id)}
+                  onClick={() => handlers.onCancel!(invoice.id)}
                   className="text-destructive focus:text-destructive"
                 >
                   Cancel Package

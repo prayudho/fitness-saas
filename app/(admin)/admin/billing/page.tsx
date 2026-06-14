@@ -119,8 +119,8 @@ export default function AdminBillingPage() {
     await refundMutation.mutateAsync({ invoiceId, reason })
   }
 
-  async function handleCancel(membershipId: string) {
-    await cancelMutation.mutateAsync(membershipId)
+  async function handleCancel(invoiceId: string) {
+    await cancelMutation.mutateAsync(invoiceId)
   }
 
   const columns = getInvoiceColumns({
