@@ -108,7 +108,6 @@ export async function getTrainerActiveMembers(
         membership_id,
         assigned_at,
         status,
-        member_profile:profiles!pt_assignments_member_brand_fkey(id, full_name, avatar_url),
         membership:memberships!pt_assignments_membership_id_fkey(
           pt_sessions_remaining,
           pt_sessions_expires_at,
@@ -122,19 +121,25 @@ export async function getTrainerActiveMembers(
 
     if (error) return { data: [], error: error.message }
 
+    // Fetch member profiles separately — the composite FK join hint is unreliable
+    const rows = rawRows ?? []
+    const memberIds = [...new Set(rows.map((r) => (r as { member_id: string }).member_id))]
+    const { data: memberProfiles } = memberIds.length > 0
+      ? await supabase.from('profiles').select('id, full_name, avatar_url').in('id', memberIds)
+      : { data: [] as { id: string; full_name: string | null; avatar_url: string | null }[] }
+
+    const profileMap: Record<string, { full_name: string | null; avatar_url: string | null }> = Object.fromEntries(
+      (memberProfiles ?? []).map((p) => [p.id, { full_name: p.full_name, avatar_url: p.avatar_url }])
+    )
+
     type AssignmentSelectRow = Pick<PTAssignmentRow, 'id' | 'member_id' | 'membership_id' | 'assigned_at' | 'status'> & {
-      member_profile: { id: string; full_name: string; avatar_url: string | null } | null
       membership: { pt_sessions_remaining: number | null; pt_sessions_expires_at: string | null; membership_packages: { name: string; package_category: string } | null } | null
     }
-    const data = (rawRows as unknown as AssignmentSelectRow[]) ?? []
+    const data = rows as unknown as AssignmentSelectRow[]
 
     const result: TrainerActiveMember[] = data.map((row) => {
-      const mp  = row.member_profile
-      const mem = row.membership as {
-        pt_sessions_remaining: number | null
-        pt_sessions_expires_at: string | null
-        membership_packages: { name: string; package_category: string } | null
-      } | null
+      const mp  = profileMap[row.member_id]
+      const mem = row.membership
       return {
         assignment_id:          row.id,
         member_id:              row.member_id,
