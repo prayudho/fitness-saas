@@ -18,6 +18,7 @@ import {
   ChevronRight,
   LogOut,
   Dumbbell,
+  Coins,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { href: '/admin/packages', label: 'Packages', icon: Package },
   { href: '/admin/classes', label: 'Classes', icon: CalendarDays },
   { href: '/admin/trainers', label: 'Trainers', icon: UserCheck },
+  { href: '/admin/commissions', label: 'Commissions', icon: Coins },
   { href: '/admin/team', label: 'Team', icon: UsersRound },
   { href: '/admin/billing', label: 'Billing', icon: CreditCard },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3 },

@@ -13,10 +13,26 @@ export async function getAuthedProfile(
 
   const brandId = cookies().get('__fp_brand_id')?.value ?? null
 
-  const query = supabase.from('profiles').select('*').eq('id', user.id)
-  const { data: profile, error: profileError } = await (
-    brandId ? query.eq('brand_id', brandId) : query.is('brand_id', null)
-  ).maybeSingle()
+  let profile: Profile | null = null
+  let profileError: unknown = null
+
+  if (brandId) {
+    const { data, error } = await supabase
+      .from('profiles').select('*').eq('id', user.id).eq('brand_id', brandId).maybeSingle()
+    profile = data; profileError = error
+  } else {
+    // Try superadmin (brand_id IS NULL) first
+    const { data: sa } = await supabase
+      .from('profiles').select('*').eq('id', user.id).is('brand_id', null).maybeSingle()
+    if (sa) {
+      profile = sa
+    } else {
+      // Fall back to first branded profile (members/staff/trainers on main domain)
+      const { data: bp, error: bpErr } = await supabase
+        .from('profiles').select('*').eq('id', user.id).not('brand_id', 'is', null).limit(1).maybeSingle()
+      profile = bp; profileError = bpErr
+    }
+  }
 
   if (profileError || !profile) throw new Error('Profile not found for this brand')
   return { user, profile }

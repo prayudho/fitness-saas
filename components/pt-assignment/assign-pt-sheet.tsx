@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -18,6 +18,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from '@/components/ui/form'
 import {
   Select,
@@ -30,9 +31,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { useAssignPT, useReassignPT, useReleasePT } from '@/lib/hooks/use-pt-assignments'
 import { useTrainers } from '@/lib/hooks/use-trainers'
+import { createClient } from '@/lib/supabase/browser'
 
 const schema = z.object({
   trainer_id: z.string().min(1, 'Please select a trainer'),
+  sales_person_id: z.string().optional(),
   notes: z.string().optional(),
 })
 
@@ -58,25 +61,58 @@ export function AssignPTSheet({
   const assignMutation  = useAssignPT()
   const reassignMutation = useReassignPT()
   const { data: trainers = [], isLoading: loadingTrainers } = useTrainers()
+  const [salesPeople, setSalesPeople] = useState<{ id: string; name: string; role: string }[]>([])
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { trainer_id: '', notes: '' },
+    defaultValues: { trainer_id: '', sales_person_id: '', notes: '' },
   })
+
+  // Fetch staff/trainer/admin profiles for the "Sold By" selector
+  useEffect(() => {
+    async function fetchSalesPeople() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('brand_id')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (!profileRow?.brand_id) return
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, role')
+        .eq('brand_id', profileRow.brand_id)
+        .in('role', ['staff', 'trainer', 'admin'])
+        .order('full_name')
+      setSalesPeople((data ?? []).map((p) => ({ id: p.id, name: p.full_name ?? 'Unknown', role: p.role ?? '' })))
+    }
+    if (open) fetchSalesPeople()
+  }, [open])
+
+  // Auto-populate "Sold By" with the selected trainer when it changes (if not already set)
+  const watchedTrainerId = form.watch('trainer_id')
+  useEffect(() => {
+    if (watchedTrainerId && !form.getValues('sales_person_id')) {
+      form.setValue('sales_person_id', watchedTrainerId)
+    }
+  }, [watchedTrainerId, form])
 
   async function onSubmit(data: FormData) {
     if (mode === 'assign') {
       await assignMutation.mutateAsync({
-        member_id: memberId,
-        trainer_id: data.trainer_id,
-        membership_id: membershipId,
-        notes: data.notes,
+        member_id:       memberId,
+        trainer_id:      data.trainer_id,
+        membership_id:   membershipId,
+        notes:           data.notes,
+        sales_person_id: data.sales_person_id || undefined,
       })
     } else if (currentAssignmentId) {
       await reassignMutation.mutateAsync({
-        assignment_id: currentAssignmentId,
-        new_trainer_id: data.trainer_id,
-        notes: data.notes,
+        assignment_id:   currentAssignmentId,
+        new_trainer_id:  data.trainer_id,
+        notes:           data.notes,
       })
     }
     form.reset()
@@ -92,7 +128,7 @@ export function AssignPTSheet({
           <SheetTitle>{mode === 'assign' ? 'Assign Personal Trainer' : 'Reassign Trainer'}</SheetTitle>
           <SheetDescription>
             {mode === 'assign'
-              ? 'Select a trainer for this membership. A sales commission will be recorded for the trainer.'
+              ? 'Select a trainer for this membership. A sales commission will be recorded for the sold-by person.'
               : 'The current assignment will be closed and a new one created.'}
           </SheetDescription>
         </SheetHeader>
@@ -123,6 +159,37 @@ export function AssignPTSheet({
                 </FormItem>
               )}
             />
+
+            {mode === 'assign' && (
+              <FormField
+                control={form.control}
+                name="sales_person_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sold By</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select sales person…" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {salesPeople.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                            {p.role ? ` (${p.role})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      This person earns the sales commission for this package.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}
