@@ -282,7 +282,7 @@ export default function ClassesPage() {
               <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
                 <h4 className="text-sm font-semibold">Edit: {editingType.name}</h4>
                 <ClassTypeFormFields
-                  defaultValues={editingType}
+                  defaultValues={{ ...editingType, icon: editingType.icon ?? undefined }}
                   onSubmit={async (data) => {
                     await updateClassType.mutateAsync({ id: editingType.id, input: data })
                     setEditingType(null)

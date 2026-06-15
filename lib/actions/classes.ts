@@ -57,13 +57,15 @@ export async function getClassTypes(): Promise<{ data: ClassTypeRow[]; error?: s
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: [], error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('class_types')
       .select('*')
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .order('name')
 
+    const data = rawData as ClassTypeRow[] | null
     if (error) return { data: [], error: error.message }
     return { data: data ?? [] }
   } catch (e) {
@@ -78,18 +80,20 @@ export async function createClassType(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('class_types')
       .insert({
-        brand_id: profile.brand_id,
+        brand_id: brandId,
         name: input.name,
         color: input.color ?? '#6366f1',
         icon: input.icon ?? null,
-      })
+      } as never)
       .select()
       .single()
 
+    const data = rawData as ClassTypeRow | null
     if (error) return { error: error.message }
     revalidatePath('/admin/classes')
     return { data: data ?? undefined }
@@ -106,19 +110,21 @@ export async function updateClassType(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('class_types')
       .update({
         ...(input.name !== undefined && { name: input.name }),
         ...(input.color !== undefined && { color: input.color }),
         ...(input.icon !== undefined && { icon: input.icon }),
-      })
+      } as never)
       .eq('id', id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .select()
       .single()
 
+    const data = rawData as ClassTypeRow | null
     if (error) return { error: error.message }
     revalidatePath('/admin/classes')
     return { data: data ?? undefined }
@@ -132,13 +138,14 @@ export async function deleteClassType(id: string): Promise<{ error?: string }> {
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
     // Check if any classes use this type
     const { count, error: countError } = await supabase
       .from('classes')
       .select('id', { count: 'exact', head: true })
       .eq('class_type_id', id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
 
     if (countError) return { error: countError.message }
     if ((count ?? 0) > 0) {
@@ -149,7 +156,7 @@ export async function deleteClassType(id: string): Promise<{ error?: string }> {
       .from('class_types')
       .delete()
       .eq('id', id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
 
     if (error) return { error: error.message }
     revalidatePath('/admin/classes')
@@ -171,6 +178,7 @@ export async function getClasses(filters?: {
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: [], error: 'No brand context' }
+    const brandId = profile.brand_id
 
     // Default weekStart = Monday of current week
     let weekStartDate: Date
@@ -196,7 +204,7 @@ export async function getClasses(filters?: {
         instructor_profile:profiles!classes_instructor_brand_fkey(id, full_name, avatar_url),
         class_bookings(id, status)
       `)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .gte('scheduled_at', weekStartDate.toISOString())
       .lt('scheduled_at', weekEndDate.toISOString())
       .order('scheduled_at')
@@ -205,9 +213,16 @@ export async function getClasses(filters?: {
       query = query.eq('class_type_id', filters.classTypeId)
     }
 
-    const { data, error } = await query
+    const { data: rawData, error } = await query
 
     if (error) return { data: [], error: error.message }
+
+    type RawClass = ClassRow & {
+      class_bookings: { id: string; status: string }[] | null
+      class_types: ClassWithDetails['class_types']
+      instructor_profile: ClassWithDetails['instructor_profile']
+    }
+    const data = rawData as RawClass[] | null
 
     const result: ClassWithDetails[] = (data ?? []).map((cls) => {
       const bookings = (cls.class_bookings ?? []) as { id: string; status: string }[]
@@ -244,8 +259,9 @@ export async function getClass(id: string): Promise<{ data?: ClassDetail; error?
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('classes')
       .select(`
         *,
@@ -254,8 +270,15 @@ export async function getClass(id: string): Promise<{ data?: ClassDetail; error?
         class_bookings(*)
       `)
       .eq('id', id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .single()
+
+    type RawClassDetail = ClassRow & {
+      class_bookings: ClassBookingRow[] | null
+      class_types: ClassDetail['class_types']
+      instructor_profile: ClassDetail['instructor_profile']
+    }
+    const data = rawData as RawClassDetail | null
 
     if (error) return { error: error.message }
     if (!data) return { error: 'Class not found' }
@@ -265,11 +288,13 @@ export async function getClass(id: string): Promise<{ data?: ClassDetail; error?
     const memberIds = [...new Set(rawBookings.map((b) => b.member_id))]
     const profileMap: Record<string, Pick<Row<'profiles'>, 'id' | 'full_name' | 'avatar_url' | 'phone'>> = {}
     if (memberIds.length > 0) {
-      const { data: memberProfiles } = await supabase
+      const { data: rawMemberProfiles } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url, phone')
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .in('id', memberIds)
+      type MemberProfileResult = Pick<Row<'profiles'>, 'id' | 'full_name' | 'avatar_url' | 'phone'>
+      const memberProfiles = rawMemberProfiles as MemberProfileResult[] | null
       for (const p of memberProfiles ?? []) profileMap[p.id] = p as typeof profileMap[string]
     }
 
@@ -306,11 +331,12 @@ export async function createClass(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('classes')
       .insert({
-        brand_id: profile.brand_id,
+        brand_id: brandId,
         class_type_id: input.class_type_id,
         instructor_id: input.instructor_id ?? null,
         room: input.room ?? null,
@@ -318,10 +344,11 @@ export async function createClass(
         duration_minutes: input.duration_minutes,
         scheduled_at: input.scheduled_at,
         status: 'scheduled',
-      })
+      } as never)
       .select()
       .single()
 
+    const data = rawData as ClassRow | null
     if (error) return { error: error.message }
     revalidatePath('/admin/classes')
     return { data: data ?? undefined }
@@ -338,8 +365,9 @@ export async function updateClass(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('classes')
       .update({
         ...(input.class_type_id !== undefined && { class_type_id: input.class_type_id }),
@@ -348,12 +376,13 @@ export async function updateClass(
         ...(input.capacity !== undefined && { capacity: input.capacity }),
         ...(input.duration_minutes !== undefined && { duration_minutes: input.duration_minutes }),
         ...(input.scheduled_at !== undefined && { scheduled_at: input.scheduled_at }),
-      })
+      } as never)
       .eq('id', id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .select()
       .single()
 
+    const data = rawData as ClassRow | null
     if (error) return { error: error.message }
     revalidatePath('/admin/classes')
     return { data: data ?? undefined }
@@ -367,12 +396,13 @@ export async function cancelClass(id: string): Promise<{ error?: string }> {
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
     const { error } = await supabase
       .from('classes')
-      .update({ status: 'cancelled' })
+      .update({ status: 'cancelled' } as never)
       .eq('id', id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
 
     if (error) return { error: error.message }
     revalidatePath('/admin/classes')
@@ -396,17 +426,20 @@ export async function bookClass(
     if (!profile.brand_id) return { error: 'No brand context' }
 
     // Get class details
-    const { data: cls, error: clsError } = await supabase
+    const { data: rawCls, error: clsError } = await supabase
       .from('classes')
       .select('capacity, status')
       .eq('id', classId)
       .single()
 
+    type ClsResult = { capacity: number; status: string }
+    const cls = rawCls as ClsResult | null
+
     if (clsError || !cls) return { error: 'Class not found' }
     if (cls.status === 'cancelled') return { error: 'This class has been cancelled' }
 
     // Check for existing booking
-    const { data: existingBooking } = await supabase
+    const { data: rawExistingBooking } = await supabase
       .from('class_bookings')
       .select('id, status')
       .eq('class_id', classId)
@@ -414,6 +447,7 @@ export async function bookClass(
       .not('status', 'eq', 'cancelled')
       .maybeSingle()
 
+    const existingBooking = rawExistingBooking as { id: string; status: string } | null
     if (existingBooking) return { error: 'You already have a booking for this class' }
 
     // Count booked (not cancelled/waitlisted)
@@ -428,16 +462,17 @@ export async function bookClass(
     const isFull = (bookedCount ?? 0) >= cls.capacity
     const bookingStatus = isFull ? 'waitlisted' : 'booked'
 
-    const { data: booking, error: bookingError } = await supabase
+    const { data: rawBooking, error: bookingError } = await supabase
       .from('class_bookings')
       .insert({
         class_id: classId,
         member_id: user.id,
         status: bookingStatus,
-      })
+      } as never)
       .select()
       .single()
 
+    const booking = rawBooking as { id: string } | null
     if (bookingError || !booking) return { error: bookingError?.message ?? 'Failed to book class' }
 
     revalidatePath('/member/classes')
@@ -453,19 +488,21 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
     const { user } = await getAuthedProfile(supabase)
 
     // Get the booking to find class_id
-    const { data: booking, error: bookingError } = await supabase
+    const { data: rawBookingData, error: bookingError } = await supabase
       .from('class_bookings')
       .select('class_id, status')
       .eq('id', bookingId)
       .eq('member_id', user.id)
       .single()
 
+    type BookingData = { class_id: string; status: string }
+    const booking = rawBookingData as BookingData | null
     if (bookingError || !booking) return { error: 'Booking not found' }
 
     // Cancel the booking
     const { error: cancelError } = await supabase
       .from('class_bookings')
-      .update({ status: 'cancelled' })
+      .update({ status: 'cancelled' } as never)
       .eq('id', bookingId)
       .eq('member_id', user.id)
 
@@ -473,7 +510,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
 
     // If the cancelled booking was 'booked', promote first waitlisted
     if (booking.status === 'booked') {
-      const { data: firstWaitlisted } = await supabase
+      const { data: rawFirstWaitlisted } = await supabase
         .from('class_bookings')
         .select('id')
         .eq('class_id', booking.class_id)
@@ -482,10 +519,11 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
         .limit(1)
         .maybeSingle()
 
+      const firstWaitlisted = rawFirstWaitlisted as { id: string } | null
       if (firstWaitlisted) {
         await supabase
           .from('class_bookings')
-          .update({ status: 'booked' })
+          .update({ status: 'booked' } as never)
           .eq('id', firstWaitlisted.id)
       }
     }
@@ -532,6 +570,7 @@ export async function getClassAttendees(classId: string): Promise<{
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: [], error: 'No brand context' }
+    const brandId = profile.brand_id
 
     const { data: bookingsData, error } = await supabase
       .from('class_bookings')
@@ -545,11 +584,13 @@ export async function getClassAttendees(classId: string): Promise<{
     const memberIds = [...new Set(rawBookings.map((b) => b.member_id))]
     const profileMap: Record<string, Pick<Row<'profiles'>, 'id' | 'full_name' | 'avatar_url' | 'phone'>> = {}
     if (memberIds.length > 0) {
-      const { data: memberProfiles } = await supabase
+      const { data: rawMemberProfiles } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url, phone')
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .in('id', memberIds)
+      type MemberProfileResult = Pick<Row<'profiles'>, 'id' | 'full_name' | 'avatar_url' | 'phone'>
+      const memberProfiles = rawMemberProfiles as MemberProfileResult[] | null
       for (const p of memberProfiles ?? []) profileMap[p.id] = p as typeof profileMap[string]
     }
 
@@ -575,7 +616,7 @@ export async function checkInAttendee(bookingId: string): Promise<{ error?: stri
       .update({
         status: 'attended',
         checked_in_at: new Date().toISOString(),
-      })
+      } as never)
       .eq('id', bookingId)
 
     if (error) return { error: error.message }

@@ -3,8 +3,11 @@
 import { cookies } from 'next/headers'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import type { Database } from '@/types/database'
 
-export async function getBrandSettings() {
+type BrandRow = Database['public']['Tables']['brands']['Row']
+
+export async function getBrandSettings(): Promise<{ data: BrandRow | null; error: string | null }> {
   const supabase = createClient()
 
   const {
@@ -23,19 +26,17 @@ export async function getBrandSettings() {
     return { data: null, error: 'Could not resolve brand for this request' }
   }
 
-  const profile = { brand_id: brandIdFromCookie }
-
-  const { data, error } = await supabase
+  const { data: rawData, error } = await supabase
     .from('brands')
     .select('*')
-    .eq('id', profile.brand_id)
+    .eq('id', brandIdFromCookie)
     .single()
 
   if (error) {
     return { data: null, error: error.message }
   }
 
-  return { data, error: null }
+  return { data: rawData as BrandRow, error: null }
 }
 
 export async function updateBrandGeneral(
@@ -70,7 +71,7 @@ export async function updateBrandGeneral(
       timezone: data.timezone,
       currency: data.currency,
       updated_at: new Date().toISOString(),
-    })
+    } as never)
     .eq('id', brandId)
 
   if (error) {
@@ -110,7 +111,7 @@ export async function updateBrandAppearance(
 
   const { error } = await supabase
     .from('brands')
-    .update(updatePayload)
+    .update(updatePayload as never)
     .eq('id', brandId)
 
   if (error) {
@@ -148,7 +149,7 @@ export async function updateCommissionSettings(
       pt_sales_commission_enabled: data.pt_sales_commission_enabled,
       pt_sales_commission_percent: data.pt_sales_commission_percent,
       updated_at:                  new Date().toISOString(),
-    })
+    } as never)
     .eq('id', brandId)
 
   if (error) {

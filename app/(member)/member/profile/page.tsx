@@ -238,7 +238,7 @@ function PersonalInfoTab({ profile, email, onAvatarUpdate }: PersonalInfoTabProp
       full_name: profile.full_name,
       phone: profile.phone ?? '',
       date_of_birth: profile.date_of_birth ?? '',
-      gender: profile.gender ?? null,
+      gender: (profile.gender as 'male' | 'female' | 'other' | 'prefer_not_to_say' | null) ?? null,
       emergency_contact_name: profile.emergency_contact_name ?? '',
       emergency_contact_phone: profile.emergency_contact_phone ?? '',
     },

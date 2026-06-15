@@ -79,22 +79,24 @@ export default function NewTrainerPage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        const { data: myProfile } = await supabase
+        const { data: rawMyProfile } = await supabase
           .from('profiles')
           .select('brand_id')
           .eq('id', user.id)
           .single()
 
+        const myProfile = rawMyProfile as { brand_id: string | null } | null
         if (!myProfile?.brand_id) return
+        const brandId = myProfile.brand_id
 
-        const { data } = await supabase
+        const { data: rawProfiles } = await supabase
           .from('profiles')
           .select('id, full_name, avatar_url, phone, role')
-          .eq('brand_id', myProfile.brand_id)
+          .eq('brand_id', brandId)
           .or(`full_name.ilike.%${search}%,phone.ilike.%${search}%`)
           .limit(10)
 
-        setProfiles(data ?? [])
+        setProfiles((rawProfiles ?? []) as ProfileRow[])
       } finally {
         setLoadingProfiles(false)
       }

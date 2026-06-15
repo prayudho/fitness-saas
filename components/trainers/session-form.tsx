@@ -67,22 +67,24 @@ export function SessionForm({ trainerId, onSuccess }: SessionFormProps) {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        const { data: profile } = await supabase
+        const { data: rawProfile } = await supabase
           .from('profiles')
           .select('brand_id')
           .eq('id', user.id)
           .single()
 
+        const profile = rawProfile as { brand_id: string | null } | null
         if (!profile?.brand_id) return
+        const brandId = profile.brand_id
 
-        const { data } = await supabase
+        const { data: rawData } = await supabase
           .from('profiles')
           .select('id, full_name')
-          .eq('brand_id', profile.brand_id)
+          .eq('brand_id', brandId)
           .in('role', ['member', 'trainer'])
           .order('full_name')
 
-        setMembers(data ?? [])
+        setMembers((rawData as Pick<ProfileRow, 'id' | 'full_name'>[] | null) ?? [])
       } finally {
         setLoadingMembers(false)
       }

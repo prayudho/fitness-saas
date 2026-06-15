@@ -71,14 +71,16 @@ export async function getPackage(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
 
-    const { data: pkg, error: pkgError } = await supabase
+    const { data: rawPkg, error: pkgError } = await supabase
       .from('membership_packages')
       .select('*')
       .eq('id', id)
       .eq('brand_id', profile.brand_id!)
       .single()
+    const pkg = rawPkg as PackageRow | null
 
     if (pkgError) throw pkgError
+    if (!pkg) return { error: 'Package not found' }
 
     const { count, error: countError } = await supabase
       .from('memberships')
@@ -123,7 +125,7 @@ export async function createPackage(
         max_freeze_days:       input.max_freeze_days ?? null,
         session_commission_amount:         input.session_commission_amount ?? null,
         sales_commission_override_percent: input.sales_commission_override_percent ?? null,
-      })
+      } as never)
       .select()
       .single()
 
@@ -168,7 +170,7 @@ export async function updatePackage(
 
     const { data, error } = await supabase
       .from('membership_packages')
-      .update(updateData)
+      .update(updateData as never)
       .eq('id', id)
       .eq('brand_id', profile.brand_id!)
       .select()
@@ -224,7 +226,7 @@ export async function togglePackageActive(
 
     const { error } = await supabase
       .from('membership_packages')
-      .update({ is_active: isActive })
+      .update({ is_active: isActive } as never)
       .eq('id', id)
       .eq('brand_id', profile.brand_id!)
 
@@ -273,7 +275,7 @@ export async function createPromoCode(
         max_uses:       input.max_uses ?? null,
         valid_from:     input.valid_from ?? new Date().toISOString(),
         valid_until:    input.valid_until ?? null,
-      })
+      } as never)
       .select()
       .single()
 
@@ -303,7 +305,7 @@ export async function updatePromoCode(
 
     const { data, error } = await supabase
       .from('promo_codes')
-      .update(updateData)
+      .update(updateData as never)
       .eq('id', id)
       .eq('brand_id', profile.brand_id!)
       .select()

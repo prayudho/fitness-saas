@@ -105,7 +105,7 @@ export default function ClassCheckinPage() {
       const todayEnd = new Date(todayStart)
       todayEnd.setDate(todayEnd.getDate() + 1)
 
-      const { data: bookings, error: bookingsError } = await supabase
+      const { data: rawBookings, error: bookingsError } = await supabase
         .from('class_bookings')
         .select(`
           id,
@@ -128,6 +128,8 @@ export default function ClassCheckinPage() {
         toast.error('Failed to load bookings: ' + bookingsError.message)
         return
       }
+
+      const bookings = rawBookings as ClassBookingItem[] | null
 
       // Filter to today's classes only
       const todayBookings = (bookings ?? []).filter((b) => {

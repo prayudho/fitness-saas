@@ -40,55 +40,61 @@ export async function getTrainers(): Promise<{ data: TrainerWithProfile[]; error
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: [], error: 'No brand context' }
+    const brandId = profile.brand_id
 
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
-    const { data: trainers, error } = await supabase
+    const { data: rawTrainers, error } = await supabase
       .from('trainers')
       .select(`
         *,
         profiles!trainers_id_brand_fkey (id, full_name, avatar_url, phone)
       `)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .order('created_at', { ascending: false })
 
     if (error) throw error
+    const trainers = (rawTrainers ?? []) as unknown as Array<TrainerRow & { profiles: Pick<ProfileRow, 'id' | 'full_name' | 'avatar_url' | 'phone'> | null }>
 
     const [sessionCountsRes, activeMembersRes, pendingPayoutsRes] = await Promise.all([
       supabase
         .from('trainer_sessions')
         .select('trainer_id')
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .gte('scheduled_at', startOfMonth),
       supabase
         .from('pt_assignments')
         .select('trainer_id')
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .in('status', ['active', 'grace_period']),
       supabase
         .from('pt_commission_payouts')
         .select('trainer_id, amount')
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .eq('status', 'pending'),
     ])
 
+    type SCount  = { trainer_id: string }
+    type AMember = { trainer_id: string }
+    type PPayout = { trainer_id: string; amount: number | null }
+
     const countMap: Record<string, number> = {}
-    for (const s of sessionCountsRes.data ?? []) {
+    for (const s of (sessionCountsRes.data ?? []) as SCount[]) {
       countMap[s.trainer_id] = (countMap[s.trainer_id] ?? 0) + 1
     }
 
     const activeMembersMap: Record<string, number> = {}
-    for (const a of activeMembersRes.data ?? []) {
+    for (const a of (activeMembersRes.data ?? []) as AMember[]) {
       activeMembersMap[a.trainer_id] = (activeMembersMap[a.trainer_id] ?? 0) + 1
     }
 
     const pendingCommissionMap: Record<string, number> = {}
-    for (const p of pendingPayoutsRes.data ?? []) {
+    for (const p of (pendingPayoutsRes.data ?? []) as PPayout[]) {
       pendingCommissionMap[p.trainer_id] = (pendingCommissionMap[p.trainer_id] ?? 0) + (p.amount ?? 0)
     }
 
-    const result: TrainerWithProfile[] = (trainers ?? []).map((t) => ({
+    const result: TrainerWithProfile[] = trainers.map((t) => ({
       ...t,
       sessions_this_month: countMap[t.id] ?? 0,
       active_members_count: activeMembersMap[t.id] ?? 0,
@@ -106,21 +112,24 @@ export async function getTrainer(id: string): Promise<{ data: TrainerDetail | nu
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: null, error: 'No brand context' }
+    const brandId = profile.brand_id
 
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
-    const { data: trainer, error } = await supabase
+    const { data: rawTrainer, error } = await supabase
       .from('trainers')
       .select(`
         *,
         profiles!trainers_id_brand_fkey (*)
       `)
       .eq('id', id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .single()
 
     if (error) throw error
+    const trainer = rawTrainer as unknown as (TrainerRow & { profiles: ProfileRow | null }) | null
+    if (!trainer) throw new Error('Trainer not found')
 
     const { data: availability } = await supabase
       .from('trainer_availability')
@@ -136,14 +145,14 @@ export async function getTrainer(id: string): Promise<{ data: TrainerDetail | nu
         member:profiles!trainer_sessions_member_brand_fkey (id, full_name, avatar_url)
       `)
       .eq('trainer_id', id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .gte('scheduled_at', startOfMonth)
       .order('scheduled_at', { ascending: false })
 
     return {
       data: {
         ...trainer,
-        trainer_availability: availability ?? [],
+        trainer_availability: (availability ?? []) as TrainerAvailabilityRow[],
         sessions: (sessions ?? []) as TrainerSessionWithMember[],
       },
     }
@@ -164,14 +173,16 @@ export async function createTrainer(input: {
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    const { data: memberProfile, error: profileError } = await supabase
+    const { data: rawMemberProfile, error: profileError } = await supabase
       .from('profiles')
       .select('id, brand_id, role')
       .eq('id', input.member_id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .single()
 
+    const memberProfile = rawMemberProfile as { id: string; brand_id: string | null; role: string } | null
     if (profileError || !memberProfile) return { error: 'Member profile not found in your brand' }
 
     const existingTrainer = await supabase
@@ -186,14 +197,14 @@ export async function createTrainer(input: {
       .from('trainers')
       .insert({
         id: input.member_id,
-        brand_id: profile.brand_id,
+        brand_id: brandId,
         bio: input.bio ?? null,
         specialties: input.specialties ?? [],
         certifications: input.certifications ?? [],
         commission_model: (input.commission_model as 'flat' | 'percent' | 'per_session') ?? 'flat',
         commission_value: input.commission_value ?? 0,
         is_active: true,
-      })
+      } as never)
       .select()
       .single()
 
@@ -201,7 +212,7 @@ export async function createTrainer(input: {
 
     await supabase
       .from('profiles')
-      .update({ role: 'trainer' })
+      .update({ role: 'trainer' } as never)
       .eq('id', input.member_id)
 
     revalidatePath('/admin/trainers')
@@ -226,6 +237,7 @@ export async function updateTrainer(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
     const updateData: Partial<Database['public']['Tables']['trainers']['Update']> = {}
     if (input.bio !== undefined) updateData.bio = input.bio
@@ -237,9 +249,9 @@ export async function updateTrainer(
 
     const { data, error } = await supabase
       .from('trainers')
-      .update(updateData)
+      .update(updateData as never)
       .eq('id', id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .select()
       .single()
 
@@ -279,7 +291,7 @@ export async function setTrainerAvailability(
             start_time: s.start_time,
             end_time: s.end_time,
             is_recurring: true,
-          }))
+          })) as never
         )
       if (insertError) throw insertError
     }
@@ -326,21 +338,23 @@ export async function createSession(input: {
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
     // Auto-link to active PT assignment for this member+trainer (enables commission)
-    const { data: ptAssignment } = await supabase
+    const { data: rawPtAssignment } = await supabase
       .from('pt_assignments')
       .select('id, membership_id')
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .eq('member_id', input.member_id)
       .eq('trainer_id', input.trainer_id)
       .in('status', ['active', 'grace_period'])
       .maybeSingle()
+    const ptAssignment = rawPtAssignment as { id: string; membership_id: string | null } | null
 
     const { data: session, error } = await supabase
       .from('trainer_sessions')
       .insert({
-        brand_id: profile.brand_id,
+        brand_id: brandId,
         trainer_id: input.trainer_id,
         member_id: input.member_id,
         pt_assignment_id: ptAssignment?.id ?? null,
@@ -349,7 +363,7 @@ export async function createSession(input: {
         session_fee: input.session_fee ?? null,
         notes: input.notes ?? null,
         status: 'scheduled',
-      })
+      } as never)
       .select()
       .single()
 
@@ -358,11 +372,14 @@ export async function createSession(input: {
     // Decrement the appropriate credit counter
     if (ptAssignment?.membership_id) {
       // PT-assignment session: decrement pt_sessions_remaining on the linked PT membership
-      const { data: ptMem } = await supabase
+      const { data: rawPtMem } = await supabase
         .from('memberships')
         .select('id, pt_sessions_remaining, pt_sessions_status')
         .eq('id', ptAssignment.membership_id)
         .maybeSingle()
+
+      type PtMemRow = { id: string; pt_sessions_remaining: number | null; pt_sessions_status: string | null }
+      const ptMem = rawPtMem as PtMemRow | null
 
       if (ptMem && (ptMem.pt_sessions_remaining ?? 0) > 0) {
         const newRemaining = (ptMem.pt_sessions_remaining ?? 1) - 1
@@ -376,21 +393,24 @@ export async function createSession(input: {
       }
     } else {
       // Non-PT session: decrement sessions_remaining on active sessions-type membership
-      const { data: membership } = await supabase
+      const { data: rawMembership } = await supabase
         .from('memberships')
         .select('id, sessions_remaining, membership_packages(type)')
         .eq('member_id', input.member_id)
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
 
+      type MembershipWithPkg = { id: string; sessions_remaining: number | null; membership_packages: { type?: string } | null }
+      const membership = rawMembership as MembershipWithPkg | null
+
       const pkgType = (membership?.membership_packages as { type?: string } | null)?.type
       if (membership && pkgType === 'sessions' && (membership.sessions_remaining ?? 0) > 0) {
         await supabase
           .from('memberships')
-          .update({ sessions_remaining: (membership.sessions_remaining ?? 1) - 1 })
+          .update({ sessions_remaining: (membership.sessions_remaining ?? 1) - 1 } as never)
           .eq('id', membership.id)
       }
     }
@@ -413,13 +433,17 @@ export async function updateSessionStatus(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    const { data: existing, error: fetchError } = await supabase
+    const { data: rawExisting, error: fetchError } = await supabase
       .from('trainer_sessions')
       .select('*, trainers!trainer_sessions_trainer_id_fkey(commission_model, commission_value)')
       .eq('id', id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .single()
+
+    type ExistingSession = TrainerSessionRow & { trainers: { commission_model?: string; commission_value?: number } | null }
+    const existing = rawExisting as ExistingSession | null
 
     if (fetchError || !existing) throw fetchError ?? new Error('Session not found')
 
@@ -434,17 +458,18 @@ export async function updateSessionStatus(
       }
     }
 
-    const { data, error } = await supabase
+    const { data: rawUpdated, error } = await supabase
       .from('trainer_sessions')
       .update({
         status,
         ...(commission_earned !== null ? { commission_earned } : {}),
         ...(status === 'completed' ? { commission_status: 'pending' } : {}),
-      })
+      } as never)
       .eq('id', id)
       .select()
       .single()
 
+    const data = rawUpdated as unknown as TrainerSessionRow | undefined
     if (error) throw error
 
     // Create a session commission payout row if there's an active PT assignment
@@ -452,34 +477,34 @@ export async function updateSessionStatus(
       const assignmentId = existing.pt_assignment_id ?? null
 
       if (assignmentId) {
-        const { data: assignment } = await supabase
+        const { data: rawAssignment } = await supabase
           .from('pt_assignments')
           .select('*, membership:memberships!pt_assignments_membership_id_fkey(membership_packages(session_commission_amount))')
           .eq('id', assignmentId)
           .single()
 
+        const assignment = rawAssignment as unknown as {
+          membership: { membership_packages: { session_commission_amount: number | null } | null } | null
+        } | null
+
         if (assignment) {
-          const pkgCommission = (
-            (assignment as unknown as {
-              membership: { membership_packages: { session_commission_amount: number | null } | null } | null
-            }).membership?.membership_packages?.session_commission_amount
-          )
+          const pkgCommission = assignment.membership?.membership_packages?.session_commission_amount
           const amount = pkgCommission ?? commission_earned
 
           if (amount && amount > 0) {
             await supabase.from('pt_commission_payouts').insert({
-              brand_id:           profile.brand_id,
+              brand_id:           brandId,
               trainer_id:         existing.trainer_id,
               payout_type:        'session',
               pt_assignment_id:   assignmentId,
               trainer_session_id: id,
               amount,
               status:             'pending',
-            })
+            } as never)
 
             await supabase
               .from('trainer_sessions')
-              .update({ session_commission_amount: amount })
+              .update({ session_commission_amount: amount } as never)
               .eq('id', id)
           }
         }
@@ -488,18 +513,24 @@ export async function updateSessionStatus(
 
     // Restore PT session credit on cancellation or no-show
     if ((status === 'cancelled' || status === 'no_show') && existing.pt_assignment_id) {
-      const { data: assignment } = await supabase
+      const { data: rawAssignment } = await supabase
         .from('pt_assignments')
         .select('membership_id')
         .eq('id', existing.pt_assignment_id)
         .single()
 
+      type AssignmentWithMembership = { membership_id: string | null }
+      const assignment = rawAssignment as AssignmentWithMembership | null
+
       if (assignment?.membership_id) {
-        const { data: mem } = await supabase
+        const { data: rawMem } = await supabase
           .from('memberships')
           .select('id, pt_sessions_remaining, pt_sessions_status')
           .eq('id', assignment.membership_id)
           .single()
+
+        type MemRow = { id: string; pt_sessions_remaining: number | null; pt_sessions_status: string | null }
+        const mem = rawMem as MemRow | null
 
         if (mem) {
           const restored = (mem.pt_sessions_remaining ?? 0) + 1
@@ -618,17 +649,21 @@ export async function getMemberPTData(): Promise<{ data: MemberPTData | null; er
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: null, error: 'No brand context' }
+    const brandId = profile.brand_id
 
     // Find active PT assignment for this member
-    const { data: assignment } = await supabase
+    const { data: rawAssignment } = await supabase
       .from('pt_assignments')
       .select('id, trainer_id, membership_id, status')
       .eq('member_id', profile.id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .in('status', ['active', 'grace_period'])
       .order('assigned_at', { ascending: false })
       .limit(1)
       .maybeSingle()
+
+    type AssignmentRow = { id: string; trainer_id: string; membership_id: string; status: string }
+    const assignment = rawAssignment as AssignmentRow | null
 
     if (!assignment) return { data: { assignedTrainer: null, ptMembership: null } }
 
@@ -693,26 +728,33 @@ export async function getAvailableSlots(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: [], error: 'No brand context' }
+    const brandId = profile.brand_id
 
     // Get trainer's weekly recurring slots for this day of week
     const dayOfWeek = new Date(dateStr + 'T12:00:00').getDay() // noon avoids DST edge
-    const { data: avail } = await supabase
+    const { data: rawAvail } = await supabase
       .from('trainer_availability')
       .select('start_time, end_time')
       .eq('trainer_id', trainerId)
       .eq('day_of_week', dayOfWeek)
 
+    type AvailSlot = { start_time: string; end_time: string }
+    const avail = rawAvail as AvailSlot[] | null
+
     if (!avail || avail.length === 0) return { data: [] }
 
     // Fetch booked sessions with a ±1 day window to safely handle timezone differences
-    const { data: booked } = await supabase
+    const { data: rawBooked } = await supabase
       .from('trainer_sessions')
       .select('scheduled_at, duration_minutes')
       .eq('trainer_id', trainerId)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .eq('status', 'scheduled')
       .gte('scheduled_at', `${dateStr}T00:00:00`)
       .lt('scheduled_at', `${dateStr}T24:00:00`)
+
+    type BookedSession = { scheduled_at: string; duration_minutes: number | null }
+    const booked = rawBooked as BookedSession[] | null
 
     const bookedRanges = (booked ?? []).map((s) => ({
       start: new Date(s.scheduled_at).getTime(),
@@ -782,29 +824,36 @@ export async function bookSessionByTrainer(input: {
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
     if (profile.role !== 'trainer') return { error: 'Trainer access required.' }
+    const brandId = profile.brand_id
 
     const trainerId = profile.id  // trainers.id is FK to profiles.id
 
     // Verify the member is actively assigned to this trainer
-    const { data: assignment } = await supabase
+    const { data: rawAssignment } = await supabase
       .from('pt_assignments')
       .select('id, membership_id, status')
       .eq('trainer_id', trainerId)
       .eq('member_id', input.member_id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .eq('status', 'active')
       .maybeSingle()
+
+    type BSTAssignment = { id: string; membership_id: string; status: string }
+    const assignment = rawAssignment as BSTAssignment | null
 
     if (!assignment) return { error: 'This member is not currently assigned to you.' }
 
     if (new Date(input.scheduled_at) <= new Date())
       return { error: 'Session must be scheduled in the future.' }
 
-    const { data: membership } = await supabase
+    const { data: rawMembership } = await supabase
       .from('memberships')
       .select('id, pt_sessions_remaining, pt_sessions_status')
       .eq('id', assignment.membership_id)
       .maybeSingle()
+
+    type BSTPTMem = { id: string; pt_sessions_remaining: number | null; pt_sessions_status: string | null }
+    const membership = rawMembership as BSTPTMem | null
 
     if (!membership) return { error: 'PT membership not found.' }
     if ((membership.pt_sessions_remaining ?? 0) <= 0)
@@ -821,7 +870,7 @@ export async function bookSessionByTrainer(input: {
       .from('trainer_sessions')
       .select('id', { count: 'exact', head: true })
       .eq('trainer_id', trainerId)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .eq('status', 'scheduled')
       .gte('scheduled_at', newStart.toISOString())
       .lt('scheduled_at', newEnd.toISOString())
@@ -832,10 +881,10 @@ export async function bookSessionByTrainer(input: {
     // updating memberships requires service-role bypass
     const svc = createServiceClient()
 
-    const { data: session, error: insertErr } = await svc
+    const { data: rawSession, error: insertErr } = await svc
       .from('trainer_sessions')
       .insert({
-        brand_id:         profile.brand_id,
+        brand_id:         brandId,
         trainer_id:       trainerId,
         member_id:        input.member_id,
         pt_assignment_id: assignment.id,
@@ -844,11 +893,13 @@ export async function bookSessionByTrainer(input: {
         notes:            input.notes ?? null,
         status:           'scheduled',
         session_fee:      null,
-      })
+      } as never)
       .select('id')
       .single()
 
+    const session = rawSession as { id: string } | null
     if (insertErr) throw insertErr
+    if (!session) throw new Error('Failed to insert session')
 
     const newRemaining = (membership.pt_sessions_remaining ?? 1) - 1
     await svc
@@ -879,17 +930,21 @@ export async function bookMemberPTSession(input: {
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
     // Find the active PT assignment
-    const { data: assignment } = await supabase
+    const { data: rawAssignment } = await supabase
       .from('pt_assignments')
       .select('id, trainer_id, membership_id, status')
       .eq('member_id', profile.id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .in('status', ['active', 'grace_period'])
       .order('assigned_at', { ascending: false })
       .limit(1)
       .maybeSingle()
+
+    type BMPTAssignment = { id: string; trainer_id: string; membership_id: string; status: string }
+    const assignment = rawAssignment as BMPTAssignment | null
 
     if (!assignment) return { error: 'No active PT trainer assigned. Contact your gym.' }
     if (assignment.status === 'grace_period')
@@ -900,11 +955,14 @@ export async function bookMemberPTSession(input: {
       return { error: 'Session must be scheduled in the future.' }
 
     // Validate sessions remaining
-    const { data: membership } = await supabase
+    const { data: rawMembership } = await supabase
       .from('memberships')
       .select('id, pt_sessions_remaining, pt_sessions_status')
       .eq('id', assignment.membership_id)
       .maybeSingle()
+
+    type BMPTPTMem = { id: string; pt_sessions_remaining: number | null; pt_sessions_status: string | null }
+    const membership = rawMembership as BMPTPTMem | null
 
     if (!membership) return { error: 'PT membership not found.' }
     if ((membership.pt_sessions_remaining ?? 0) <= 0)
@@ -921,7 +979,7 @@ export async function bookMemberPTSession(input: {
       .from('trainer_sessions')
       .select('id', { count: 'exact', head: true })
       .eq('trainer_id', assignment.trainer_id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .eq('status', 'scheduled')
       .gte('scheduled_at', newStart.toISOString())
       .lt('scheduled_at', newEnd.toISOString())
@@ -931,10 +989,10 @@ export async function bookMemberPTSession(input: {
     // Use service client to bypass tsessions_write RLS (members can't insert directly)
     const serviceClient = createServiceClient()
 
-    const { data: session, error: insertErr } = await serviceClient
+    const { data: rawSession, error: insertErr } = await serviceClient
       .from('trainer_sessions')
       .insert({
-        brand_id: profile.brand_id,
+        brand_id: brandId,
         trainer_id: assignment.trainer_id,
         member_id: profile.id,
         pt_assignment_id: assignment.id,
@@ -943,11 +1001,13 @@ export async function bookMemberPTSession(input: {
         notes: input.notes ?? null,
         status: 'scheduled',
         session_fee: null,
-      })
+      } as never)
       .select('id')
       .single()
 
+    const session = rawSession as { id: string } | null
     if (insertErr) throw insertErr
+    if (!session) throw new Error('Failed to insert session')
 
     // Decrement pt_sessions_remaining; auto-exhaust when last session is booked
     const newRemaining = (membership.pt_sessions_remaining ?? 1) - 1

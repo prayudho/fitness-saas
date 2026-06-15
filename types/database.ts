@@ -11,6 +11,8 @@ export type Database = {
     Tables: {
       brands: {
         Row: {
+          address: string | null
+          business_email: string | null
           created_at: string
           currency: string
           expiry_reminder_days: number[]
@@ -19,6 +21,7 @@ export type Database = {
           logo_url: string | null
           name: string
           owner_user_id: string | null
+          phone: string | null
           primary_color: string
           pt_assignment_grace_days: number
           pt_sales_commission_enabled: boolean
@@ -30,6 +33,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          address?: string | null
+          business_email?: string | null
           created_at?: string
           currency?: string
           expiry_reminder_days?: number[]
@@ -38,6 +43,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           owner_user_id?: string | null
+          phone?: string | null
           primary_color?: string
           pt_assignment_grace_days?: number
           pt_sales_commission_enabled?: boolean
@@ -49,6 +55,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          address?: string | null
+          business_email?: string | null
           created_at?: string
           currency?: string
           expiry_reminder_days?: number[]
@@ -57,6 +65,7 @@ export type Database = {
           logo_url?: string | null
           name?: string
           owner_user_id?: string | null
+          phone?: string | null
           primary_color?: string
           pt_assignment_grace_days?: number
           pt_sales_commission_enabled?: boolean
@@ -972,6 +981,7 @@ export type Database = {
           sales_commission_amount: number | null
           sales_commission_claimed: boolean
           sales_commission_percent: number | null
+          sales_person_id: string | null
           status: string
           trainer_id: string
         }
@@ -989,6 +999,7 @@ export type Database = {
           sales_commission_amount?: number | null
           sales_commission_claimed?: boolean
           sales_commission_percent?: number | null
+          sales_person_id?: string | null
           status?: string
           trainer_id: string
         }
@@ -1006,6 +1017,7 @@ export type Database = {
           sales_commission_amount?: number | null
           sales_commission_claimed?: boolean
           sales_commission_percent?: number | null
+          sales_person_id?: string | null
           status?: string
           trainer_id?: string
         }

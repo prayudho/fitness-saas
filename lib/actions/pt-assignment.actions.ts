@@ -566,14 +566,18 @@ export async function listCommissions(
       if (p.pt_assignment_id) assignmentIds.add(p.pt_assignment_id)
     }
 
+    type ProfileNameRow = { id: string; full_name: string | null }
+    type SessionSelectRow = { id: string; scheduled_at: string; member_id: string }
+
     // Build profile name map (direct from profiles table — covers trainers and staff)
     const profileMap: Record<string, string> = {}
     if (profileIds.size > 0) {
-      const { data: directProfiles } = await supabase
+      const { data: rawDirectProfiles } = await supabase
         .from('profiles')
         .select('id, full_name')
         .in('id', [...profileIds])
-      for (const p of (directProfiles ?? [])) {
+      const directProfiles = (rawDirectProfiles ?? []) as ProfileNameRow[]
+      for (const p of directProfiles) {
         profileMap[p.id] = p.full_name ?? 'Unknown'
       }
     }
@@ -582,20 +586,22 @@ export async function listCommissions(
     type SessionRow = { id: string; scheduled_at: string; member_id: string }
     const sessionMap: Record<string, SessionRow> = {}
     if (sessionIds.size > 0) {
-      const { data: sessions } = await supabase
+      const { data: rawSessions } = await supabase
         .from('trainer_sessions')
         .select('id, scheduled_at, member_id')
         .in('id', [...sessionIds])
-      for (const s of (sessions ?? [])) {
-        sessionMap[s.id] = s as SessionRow
+      const sessions = (rawSessions ?? []) as SessionSelectRow[]
+      for (const s of sessions) {
+        sessionMap[s.id] = s
       }
-      const memberIds = (sessions ?? []).map((s) => s.member_id).filter(Boolean)
+      const memberIds = sessions.map((s) => s.member_id).filter(Boolean)
       if (memberIds.length > 0) {
-        const { data: memberProfiles } = await supabase
+        const { data: rawMemberProfiles } = await supabase
           .from('profiles')
           .select('id, full_name')
           .in('id', memberIds)
-        for (const mp of (memberProfiles ?? [])) {
+        const memberProfiles = (rawMemberProfiles ?? []) as ProfileNameRow[]
+        for (const mp of memberProfiles) {
           if (!profileMap[mp.id]) profileMap[mp.id] = mp.full_name ?? 'Unknown'
         }
       }
@@ -620,11 +626,12 @@ export async function listCommissions(
       }
       const assignmentMemberIds = ((assignments as AssignmentRow[]) ?? []).map((a) => a.member_id).filter(Boolean)
       if (assignmentMemberIds.length > 0) {
-        const { data: assignmentMembers } = await supabase
+        const { data: rawAssignmentMembers } = await supabase
           .from('profiles')
           .select('id, full_name')
           .in('id', assignmentMemberIds)
-        for (const mp of (assignmentMembers ?? [])) {
+        const assignmentMembers = (rawAssignmentMembers ?? []) as ProfileNameRow[]
+        for (const mp of assignmentMembers) {
           if (!profileMap[mp.id]) profileMap[mp.id] = mp.full_name ?? 'Unknown'
         }
       }

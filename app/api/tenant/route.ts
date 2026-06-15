@@ -10,12 +10,15 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = createClient()
-    const { data: brand, error } = await supabase
+    const { data: rawBrand, error } = await supabase
       .from('brands')
       .select('id, name, subdomain, logo_url, primary_color, is_active')
       .eq('subdomain', subdomain)
       .eq('is_active', true)
       .single()
+
+    type BrandRow = { id: string; name: string; subdomain: string; logo_url: string | null; primary_color: string | null; is_active: boolean }
+    const brand = rawBrand as BrandRow | null
 
     if (error || !brand) {
       return NextResponse.json({ tenant: null }, { status: 404 })

@@ -319,7 +319,6 @@ export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
                         today.setHours(0, 0, 0, 0)
                         return date < today
                       }}
-                      initialFocus
                     />
                   </PopoverContent>
                 </Popover>

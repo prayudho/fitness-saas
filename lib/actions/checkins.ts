@@ -54,14 +54,18 @@ export async function processCheckin(input: {
         member: { full_name: null, avatar_url: null },
       }
     }
+    const brandId = staffProfile.brand_id
 
     // Fetch member profile
-    const { data: memberProfile, error: profileError } = await supabase
+    const { data: rawMemberProfile, error: profileError } = await supabase
       .from('profiles')
       .select('id, full_name, avatar_url, brand_id, role')
       .eq('id', input.member_id)
-      .eq('brand_id', staffProfile.brand_id)
+      .eq('brand_id', brandId)
       .single()
+
+    type ProfileResult = { id: string; full_name: string | null; avatar_url: string | null; brand_id: string | null; role: string | null }
+    const memberProfile = rawMemberProfile as ProfileResult | null
 
     if (profileError || !memberProfile) {
       return {
@@ -73,15 +77,18 @@ export async function processCheckin(input: {
     }
 
     // Fetch most recent active membership
-    const { data: membership, error: membershipError } = await supabase
+    const { data: rawMembership, error: membershipError } = await supabase
       .from('memberships')
       .select('*, membership_packages(name)')
       .eq('member_id', input.member_id)
-      .eq('brand_id', staffProfile.brand_id)
+      .eq('brand_id', brandId)
       .in('status', ['active', 'frozen'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
+
+    type MembershipResult = MembershipRow & { membership_packages: { name: string } | null }
+    const membership = rawMembership as MembershipResult | null
 
     if (membershipError || !membership) {
       return {
@@ -146,14 +153,14 @@ export async function processCheckin(input: {
         : null
 
     await supabase.from('checkins').insert({
-      brand_id:       staffProfile.brand_id,
+      brand_id:       brandId,
       member_id:      input.member_id,
       membership_id:  membership.id,
       method:         input.method,
       checked_in_at:  new Date().toISOString(),
       staff_override: null,
       warning_message: warningMessage,
-    })
+    } as never)
 
     revalidatePath('/staff/checkin')
 
@@ -204,16 +211,17 @@ export async function recordCheckinWithOverride(input: {
     const supabase = createClient()
     const { profile: staffProfile } = await getAuthedProfile(supabase)
     if (!staffProfile.brand_id) return { error: 'No brand context' }
+    const brandId2 = staffProfile.brand_id
 
     await supabase.from('checkins').insert({
-      brand_id:        staffProfile.brand_id,
+      brand_id:        brandId2,
       member_id:       input.member_id,
       membership_id:   input.membership_id,
       method:          input.method,
       checked_in_at:   new Date().toISOString(),
       staff_override:  input.allowed,
       warning_message: input.warning_message,
-    })
+    } as never)
 
     revalidatePath('/staff/checkin')
     return {}
@@ -304,23 +312,27 @@ export async function createWalkinPass(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    const { data: pkg, error: pkgError } = await supabase
+    const { data: rawPkg, error: pkgError } = await supabase
       .from('membership_packages')
       .select('*')
       .eq('id', packageId)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .eq('type', 'day_pass')
       .single()
+
+    type PkgResult = MembershipPackageRow
+    const pkg = rawPkg as PkgResult | null
 
     if (pkgError || !pkg) return { error: pkgError?.message ?? 'Day pass package not found' }
 
     const today = new Date().toISOString().split('T')[0]
 
-    const { data: membership, error: membershipError } = await supabase
+    const { data: rawMembership, error: membershipError } = await supabase
       .from('memberships')
       .insert({
-        brand_id:              profile.brand_id,
+        brand_id:              brandId,
         member_id:             memberId,
         package_id:            packageId,
         status:                'active',
@@ -332,39 +344,43 @@ export async function createWalkinPass(
         gym_access_expires_at: `${today}T23:59:59.999Z`,
         gym_access_status:     'active',
         pt_sessions_status:    'active',
-      })
+      } as never)
       .select()
       .single()
+
+    const membership = rawMembership as MembershipRow | null
 
     if (membershipError || !membership) {
       return { error: membershipError?.message ?? 'Failed to create membership' }
     }
 
-    const { data: invoice, error: invoiceError } = await supabase
+    const { data: rawInvoice, error: invoiceError } = await supabase
       .from('invoices')
       .insert({
-        brand_id:      profile.brand_id,
+        brand_id:      brandId,
         member_id:     memberId,
         membership_id: membership.id,
         amount:        pkg.price,
         currency:      pkg.currency,
         status:        'pending',
         notes:         'Walk-in day pass',
-      })
+      } as never)
       .select()
       .single()
+
+    const invoice = rawInvoice as InvoiceRow | null
 
     if (invoiceError || !invoice) {
       return { error: invoiceError?.message ?? 'Failed to create invoice' }
     }
 
     await supabase.from('checkins').insert({
-      brand_id:       profile.brand_id,
+      brand_id:       brandId,
       member_id:      memberId,
       membership_id:  membership.id,
       method:         'staff',
       checked_in_at:  new Date().toISOString(),
-    })
+    } as never)
 
     revalidatePath('/staff/checkin')
     revalidatePath('/staff/walkin')

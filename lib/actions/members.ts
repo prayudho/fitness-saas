@@ -92,13 +92,15 @@ export async function getMember(id: string): Promise<{ data?: MemberDetail; erro
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    const { data: memberProfile, error: profileError } = await supabase
+    const { data: rawMemberProfile, error: profileError } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .single()
+    const memberProfile = rawMemberProfile as ProfileRow | null
 
     if (profileError || !memberProfile) return { error: profileError?.message ?? 'Member not found' }
 
@@ -157,6 +159,7 @@ export async function updateMember(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
     const { data, error } = await supabase
       .from('profiles')
@@ -173,9 +176,9 @@ export async function updateMember(
         ...(input.emergency_contact_phone !== undefined && {
           emergency_contact_phone: input.emergency_contact_phone,
         }),
-      })
+      } as never)
       .eq('id', id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .select()
       .single()
 
@@ -204,13 +207,13 @@ export async function freezeMembership(
       frozen_until: input.frozen_until,
       reason: input.reason ?? null,
       created_by: user.id,
-    })
+    } as never)
 
     if (freezeError) return { error: freezeError.message }
 
     const { error: updateError } = await supabase
       .from('memberships')
-      .update({ status: 'frozen' })
+      .update({ status: 'frozen' } as never)
       .eq('id', membershipId)
 
     if (updateError) return { error: updateError.message }
@@ -232,14 +235,14 @@ export async function unfreezeMembership(membershipId: string): Promise<{ error?
 
     const { error: updateMembershipError } = await supabase
       .from('memberships')
-      .update({ status: 'active' })
+      .update({ status: 'active' } as never)
       .eq('id', membershipId)
 
     if (updateMembershipError) return { error: updateMembershipError.message }
 
     await supabase
       .from('membership_freezes')
-      .update({ frozen_until: today })
+      .update({ frozen_until: today } as never)
       .eq('membership_id', membershipId)
       .gt('frozen_until', today)
 
@@ -255,16 +258,18 @@ export async function cancelMembership(membershipId: string): Promise<{ error?: 
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
-    const { data: mem } = await supabase
+    const { data: rawMem } = await supabase
       .from('memberships')
       .select('id, status')
       .eq('id', membershipId)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .single()
+    const mem = rawMem as { id: string; status: string } | null
 
     if (!mem) return { error: 'Membership not found' }
-    if ((mem.status as string) !== 'pending_payment') {
+    if (mem.status !== 'pending_payment') {
       return { error: 'Only unpaid memberships can be cancelled from here' }
     }
 
@@ -273,7 +278,7 @@ export async function cancelMembership(membershipId: string): Promise<{ error?: 
       .from('invoices')
       .delete()
       .eq('membership_id', membershipId)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .eq('status', 'pending')
 
     if (invErr) return { error: invErr.message }
@@ -283,7 +288,7 @@ export async function cancelMembership(membershipId: string): Promise<{ error?: 
       .from('memberships')
       .delete()
       .eq('id', membershipId)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
 
     if (memErr) return { error: memErr.message }
 
@@ -308,14 +313,16 @@ export async function assignPackage(input: {
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
 
     // Fetch the package
-    const { data: pkg, error: pkgError } = await supabase
+    const { data: rawPkg, error: pkgError } = await supabase
       .from('membership_packages')
       .select('*')
       .eq('id', input.package_id)
-      .eq('brand_id', profile.brand_id)
+      .eq('brand_id', brandId)
       .single()
+    const pkg = rawPkg as MembershipPackageRow | null
 
     if (pkgError || !pkg) return { error: pkgError?.message ?? 'Package not found' }
 
@@ -347,13 +354,15 @@ export async function assignPackage(input: {
 
     if (input.promo_code) {
       const now = new Date().toISOString()
-      const { data: promo, error: promoError } = await supabase
+      const { data: rawPromo, error: promoError } = await supabase
         .from('promo_codes')
         .select('*')
         .eq('code', input.promo_code)
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .eq('is_active', true)
         .single()
+      type PromoRow = Row<'promo_codes'>
+      const promo = rawPromo as PromoRow | null
 
       if (promoError || !promo) return { error: 'Invalid or inactive promo code' }
 
@@ -378,13 +387,13 @@ export async function assignPackage(input: {
     }
 
     // ── Normal flow: create a new membership ─────────────────────────────────
-    const { data: membership, error: membershipError } = await supabase
+    const { data: rawMembership, error: membershipError } = await supabase
       .from('memberships')
       .insert({
-        brand_id:              profile.brand_id,
+        brand_id:              brandId,
         member_id:             input.member_id,
         package_id:            input.package_id,
-        status:                'pending_payment' as never,
+        status:                'pending_payment',
         starts_at:             input.starts_at,
         expires_at:            expiresAt,
         sessions_remaining:    pkg.session_credits ?? ptSessionsRemaining,
@@ -395,41 +404,44 @@ export async function assignPackage(input: {
         pt_sessions_remaining: ptSessionsRemaining,
         gym_access_status:     'active',
         pt_sessions_status:    'active',
-      })
+      } as never)
       .select()
       .single()
+    const membership = rawMembership as MembershipRow | null
 
     if (membershipError || !membership) return { error: membershipError?.message ?? 'Failed to create membership' }
 
     // Insert invoice
-    const { data: invoice, error: invoiceError } = await supabase
+    const { data: rawInvoice, error: invoiceError } = await supabase
       .from('invoices')
       .insert({
-        brand_id: profile.brand_id,
+        brand_id: brandId,
         member_id: input.member_id,
         membership_id: membership.id,
         amount: finalAmount,
         currency: pkg.currency,
         status: 'pending',
         notes: promoCodeId ? `Promo code applied` : null,
-      })
+      } as never)
       .select()
       .single()
+    const invoice = rawInvoice as InvoiceRow | null
 
     if (invoiceError || !invoice) return { error: invoiceError?.message ?? 'Failed to create invoice' }
 
     // Increment promo code usage
     if (promoCodeId) {
-      const { data: currentPromo } = await supabase
+      const { data: rawCurrentPromo } = await supabase
         .from('promo_codes')
         .select('used_count')
         .eq('id', promoCodeId)
         .single()
+      const currentPromo = rawCurrentPromo as { used_count: number } | null
 
       if (currentPromo) {
         await supabase
           .from('promo_codes')
-          .update({ used_count: currentPromo.used_count + 1 })
+          .update({ used_count: currentPromo.used_count + 1 } as never)
           .eq('id', promoCodeId)
       }
     }

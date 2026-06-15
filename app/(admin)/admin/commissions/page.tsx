@@ -55,19 +55,22 @@ export default function CommissionsPage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: profileRow } = await supabase
+      const { data: rawProfileRow } = await supabase
         .from('profiles')
         .select('brand_id')
         .eq('id', user.id)
         .maybeSingle()
+      const profileRow = rawProfileRow as { brand_id: string | null } | null
       if (!profileRow?.brand_id) return
-      const { data } = await supabase
+      const brandId = profileRow.brand_id
+      const { data: rawPeople } = await supabase
         .from('profiles')
         .select('id, full_name')
-        .eq('brand_id', profileRow.brand_id)
+        .eq('brand_id', brandId)
         .in('role', ['staff', 'trainer', 'admin'])
         .order('full_name')
-      setSalesPeople((data ?? []).map((p) => ({ id: p.id, name: p.full_name ?? 'Unknown' })))
+      const people = (rawPeople ?? []) as { id: string; full_name: string | null }[]
+      setSalesPeople(people.map((p) => ({ id: p.id, name: p.full_name ?? 'Unknown' })))
     }
     fetchSalesPeople()
   }, [])
