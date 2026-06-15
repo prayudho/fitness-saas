@@ -424,7 +424,7 @@ export default function TrainerSessionsPage() {
     },
   ]
 
-  const activeClients = clients.filter((c) => c.status === 'active')
+  const activeClients = clients.filter((c) => c.status === 'active' || c.status === 'grace_period')
 
   return (
     <div className="space-y-6">
@@ -432,12 +432,14 @@ export default function TrainerSessionsPage() {
         title="PT Sessions"
         description="Manage your personal training sessions"
         action={
-          activeClients.length > 0 ? (
-            <Button onClick={() => setBookOpen(true)}>
-              <CalendarPlus className="mr-2 h-4 w-4" />
-              Book Session
-            </Button>
-          ) : undefined
+          <Button
+            onClick={() => setBookOpen(true)}
+            disabled={activeClients.length === 0}
+            title={activeClients.length === 0 ? 'No active clients assigned yet' : undefined}
+          >
+            <CalendarPlus className="mr-2 h-4 w-4" />
+            Book Session
+          </Button>
         }
       />
 

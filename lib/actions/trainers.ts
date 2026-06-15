@@ -607,7 +607,7 @@ export async function getMemberPTBookings(
         *,
         trainer:trainers!trainer_sessions_trainer_id_fkey (
           *,
-          profiles!trainers_id_fkey (id, full_name, avatar_url)
+          profiles!trainers_id_brand_fkey (id, full_name, avatar_url)
         )
       `)
       .eq('member_id', memberId)
@@ -671,13 +671,18 @@ export async function getMemberPTData(): Promise<{ data: MemberPTData | null; er
     const [trainerRes, membershipRes] = await Promise.all([
       supabase
         .from('trainers')
-        .select('id, bio, specialties, profiles!trainers_id_fkey(full_name, avatar_url)')
+        .select('id, bio, specialties, profiles!trainers_id_brand_fkey(full_name, avatar_url)')
         .eq('id', assignment.trainer_id)
         .maybeSingle(),
       supabase
         .from('memberships')
         .select('id, pt_sessions_remaining, pt_sessions_expires_at, pt_sessions_status, membership_packages(name)')
-        .eq('id', assignment.membership_id)
+        .eq('member_id', profile.id)
+        .eq('brand_id', brandId)
+        .in('package_category', ['pt_sessions', 'bundled'])
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle(),
     ])
 
