@@ -13,7 +13,7 @@ CREATE TABLE public.exercises (
   secondary_muscles text[] NOT NULL DEFAULT '{}',
   equipment         text,
   instructions      text,
-  created_by        uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_by        uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at        timestamptz NOT NULL DEFAULT now()
 );
 
@@ -25,8 +25,8 @@ CREATE TABLE public.workout_logs (
   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   brand_id           uuid NOT NULL REFERENCES public.brands(id) ON DELETE CASCADE,
   trainer_session_id uuid REFERENCES public.trainer_sessions(id) ON DELETE SET NULL,
-  trainer_id         uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  member_id          uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  trainer_id         uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  member_id          uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   exercises          jsonb NOT NULL DEFAULT '[]',
   duration_minutes   integer,
   notes              text,

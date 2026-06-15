@@ -42,7 +42,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_one_pending_per_membership
 -- ── Fix v_active_members ──────────────────────────────────────────────────────
 -- The original view referenced the removed sessions_remaining column.
 -- Replace with pt_sessions_remaining and also expose package_category.
-CREATE OR REPLACE VIEW public.v_active_members AS
+-- DROP + CREATE required because PostgreSQL cannot rename view columns with REPLACE.
+DROP VIEW IF EXISTS public.v_active_members CASCADE;
+CREATE VIEW public.v_active_members AS
 SELECT
   p.id,
   p.full_name,
