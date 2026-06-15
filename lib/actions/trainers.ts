@@ -370,34 +370,9 @@ export async function createSession(input: {
     if (error) throw error
 
     // Decrement the appropriate credit counter
-    if (ptAssignment) {
-      // PT-assignment session: decrement pt_sessions_remaining on the member's active PT membership.
-      // Use member_id lookup — not ptAssignment.membership_id which may be stale after credit stacking.
-      const { data: rawPtMem } = await supabase
-        .from('memberships')
-        .select('id, pt_sessions_remaining, pt_sessions_status')
-        .eq('member_id', input.member_id)
-        .eq('brand_id', brandId)
-        .in('package_category', ['pt_sessions', 'bundled'])
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      type PtMemRow = { id: string; pt_sessions_remaining: number | null; pt_sessions_status: string | null }
-      const ptMem = rawPtMem as PtMemRow | null
-
-      if (ptMem && (ptMem.pt_sessions_remaining ?? 0) > 0) {
-        const newRemaining = (ptMem.pt_sessions_remaining ?? 1) - 1
-        await supabase
-          .from('memberships')
-          .update({
-            pt_sessions_remaining: newRemaining,
-            ...(newRemaining <= 0 ? { pt_sessions_status: 'exhausted' as never } : {}),
-          } as never)
-          .eq('id', ptMem.id)
-      }
-    } else {
+    // PT sessions: credit is deducted only when marked 'completed' in updateSessionStatus.
+    // Cancelled / no-show sessions do not consume a credit.
+    if (!ptAssignment) {
       // Non-PT session: decrement sessions_remaining on active sessions-type membership
       const { data: rawMembership } = await supabase
         .from('memberships')
@@ -517,11 +492,11 @@ export async function updateSessionStatus(
       }
     }
 
-    // Restore PT session credit on cancellation or no-show.
-    // Look up the member's current active PT membership directly — not via the
-    // assignment FK which may be stale after credit stacking.
-    if ((status === 'cancelled' || status === 'no_show') && existing.pt_assignment_id) {
-      const { data: rawMem } = await supabase
+    // Deduct PT session credit only when a session is marked completed.
+    // Cancelled and no-show sessions do not consume a credit.
+    if (status === 'completed' && existing.pt_assignment_id) {
+      const svc = createServiceClient()
+      const { data: rawMem } = await svc
         .from('memberships')
         .select('id, pt_sessions_remaining, pt_sessions_status')
         .eq('member_id', existing.member_id)
@@ -535,13 +510,13 @@ export async function updateSessionStatus(
       type MemRow = { id: string; pt_sessions_remaining: number | null; pt_sessions_status: string | null }
       const mem = rawMem as MemRow | null
 
-      if (mem) {
-        const restored = (mem.pt_sessions_remaining ?? 0) + 1
-        await supabase
+      if (mem && (mem.pt_sessions_remaining ?? 0) > 0) {
+        const newRemaining = (mem.pt_sessions_remaining ?? 1) - 1
+        await svc
           .from('memberships')
           .update({
-            pt_sessions_remaining: restored,
-            ...(mem.pt_sessions_status === 'exhausted' ? { pt_sessions_status: 'active' as never } : {}),
+            pt_sessions_remaining: newRemaining,
+            ...(newRemaining <= 0 ? { pt_sessions_status: 'exhausted' as never } : {}),
           } as never)
           .eq('id', mem.id)
       }
@@ -915,15 +890,6 @@ export async function bookSessionByTrainer(input: {
     if (insertErr) throw insertErr
     if (!session) throw new Error('Failed to insert session')
 
-    const newRemaining = (membership.pt_sessions_remaining ?? 1) - 1
-    await svc
-      .from('memberships')
-      .update({
-        pt_sessions_remaining: newRemaining,
-        ...(newRemaining <= 0 ? { pt_sessions_status: 'exhausted' as never } : {}),
-      } as never)
-      .eq('id', membership.id)
-
     revalidatePath('/trainer/sessions')
     revalidatePath('/trainer/clients')
     revalidatePath('/member/pt-booking')
@@ -1028,16 +994,6 @@ export async function bookMemberPTSession(input: {
     const session = rawSession as { id: string } | null
     if (insertErr) throw insertErr
     if (!session) throw new Error('Failed to insert session')
-
-    // Decrement pt_sessions_remaining; auto-exhaust when last session is booked
-    const newRemaining = (membership.pt_sessions_remaining ?? 1) - 1
-    await serviceClient
-      .from('memberships')
-      .update({
-        pt_sessions_remaining: newRemaining,
-        ...(newRemaining <= 0 ? { pt_sessions_status: 'exhausted' as never } : {}),
-      } as never)
-      .eq('id', membership.id)
 
     revalidatePath('/member/pt-booking')
     revalidatePath('/member')
