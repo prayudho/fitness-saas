@@ -370,12 +370,18 @@ export async function createSession(input: {
     if (error) throw error
 
     // Decrement the appropriate credit counter
-    if (ptAssignment?.membership_id) {
-      // PT-assignment session: decrement pt_sessions_remaining on the linked PT membership
+    if (ptAssignment) {
+      // PT-assignment session: decrement pt_sessions_remaining on the member's active PT membership.
+      // Use member_id lookup — not ptAssignment.membership_id which may be stale after credit stacking.
       const { data: rawPtMem } = await supabase
         .from('memberships')
         .select('id, pt_sessions_remaining, pt_sessions_status')
-        .eq('id', ptAssignment.membership_id)
+        .eq('member_id', input.member_id)
+        .eq('brand_id', brandId)
+        .in('package_category', ['pt_sessions', 'bundled'])
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
 
       type PtMemRow = { id: string; pt_sessions_remaining: number | null; pt_sessions_status: string | null }
@@ -511,37 +517,33 @@ export async function updateSessionStatus(
       }
     }
 
-    // Restore PT session credit on cancellation or no-show
+    // Restore PT session credit on cancellation or no-show.
+    // Look up the member's current active PT membership directly — not via the
+    // assignment FK which may be stale after credit stacking.
     if ((status === 'cancelled' || status === 'no_show') && existing.pt_assignment_id) {
-      const { data: rawAssignment } = await supabase
-        .from('pt_assignments')
-        .select('membership_id')
-        .eq('id', existing.pt_assignment_id)
-        .single()
+      const { data: rawMem } = await supabase
+        .from('memberships')
+        .select('id, pt_sessions_remaining, pt_sessions_status')
+        .eq('member_id', existing.member_id)
+        .eq('brand_id', brandId)
+        .in('package_category', ['pt_sessions', 'bundled'])
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-      type AssignmentWithMembership = { membership_id: string | null }
-      const assignment = rawAssignment as AssignmentWithMembership | null
+      type MemRow = { id: string; pt_sessions_remaining: number | null; pt_sessions_status: string | null }
+      const mem = rawMem as MemRow | null
 
-      if (assignment?.membership_id) {
-        const { data: rawMem } = await supabase
+      if (mem) {
+        const restored = (mem.pt_sessions_remaining ?? 0) + 1
+        await supabase
           .from('memberships')
-          .select('id, pt_sessions_remaining, pt_sessions_status')
-          .eq('id', assignment.membership_id)
-          .single()
-
-        type MemRow = { id: string; pt_sessions_remaining: number | null; pt_sessions_status: string | null }
-        const mem = rawMem as MemRow | null
-
-        if (mem) {
-          const restored = (mem.pt_sessions_remaining ?? 0) + 1
-          await supabase
-            .from('memberships')
-            .update({
-              pt_sessions_remaining: restored,
-              ...(mem.pt_sessions_status === 'exhausted' ? { pt_sessions_status: 'active' as never } : {}),
-            } as never)
-            .eq('id', mem.id)
-        }
+          .update({
+            pt_sessions_remaining: restored,
+            ...(mem.pt_sessions_status === 'exhausted' ? { pt_sessions_status: 'active' as never } : {}),
+          } as never)
+          .eq('id', mem.id)
       }
     }
 
@@ -851,10 +853,17 @@ export async function bookSessionByTrainer(input: {
     if (new Date(input.scheduled_at) <= new Date())
       return { error: 'Session must be scheduled in the future.' }
 
+    // Look up member's actual active PT membership — not assignment.membership_id
+    // which may be stale after credit stacking onto a pre-existing membership.
     const { data: rawMembership } = await supabase
       .from('memberships')
       .select('id, pt_sessions_remaining, pt_sessions_status')
-      .eq('id', assignment.membership_id)
+      .eq('member_id', input.member_id)
+      .eq('brand_id', brandId)
+      .in('package_category', ['pt_sessions', 'bundled'])
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
 
     type BSTPTMem = { id: string; pt_sessions_remaining: number | null; pt_sessions_status: string | null }
@@ -959,11 +968,17 @@ export async function bookMemberPTSession(input: {
     if (new Date(input.scheduled_at) <= new Date())
       return { error: 'Session must be scheduled in the future.' }
 
-    // Validate sessions remaining
+    // Validate sessions remaining — look up active PT membership directly by member_id,
+    // not assignment.membership_id which may be stale after credit stacking.
     const { data: rawMembership } = await supabase
       .from('memberships')
       .select('id, pt_sessions_remaining, pt_sessions_status')
-      .eq('id', assignment.membership_id)
+      .eq('member_id', profile.id)
+      .eq('brand_id', brandId)
+      .in('package_category', ['pt_sessions', 'bundled'])
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
 
     type BMPTPTMem = { id: string; pt_sessions_remaining: number | null; pt_sessions_status: string | null }

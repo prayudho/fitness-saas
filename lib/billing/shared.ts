@@ -117,6 +117,16 @@ export async function activateMembershipForInvoice(
         } as never)
         .eq('id', invoice.id)
 
+      // Re-link any active/grace_period PT assignments that still point to the
+      // now-cancelled membership so downstream credit reads/writes use the correct row.
+      await supabase
+        .from('pt_assignments')
+        .update({ membership_id: existingPT.id } as never)
+        .eq('brand_id', invoice.brand_id)
+        .eq('member_id', memRaw.member_id)
+        .eq('membership_id', memRaw.id)
+        .in('status', ['active', 'grace_period'])
+
       return
     }
   }

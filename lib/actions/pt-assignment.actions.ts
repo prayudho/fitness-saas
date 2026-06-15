@@ -102,18 +102,7 @@ export async function getTrainerActiveMembers(
 
     const { data: rawRows, error } = await supabase
       .from('pt_assignments')
-      .select(`
-        id,
-        member_id,
-        membership_id,
-        assigned_at,
-        status,
-        membership:memberships!pt_assignments_membership_id_fkey(
-          pt_sessions_remaining,
-          pt_sessions_expires_at,
-          membership_packages(name, package_category)
-        )
-      `)
+      .select('id, member_id, membership_id, assigned_at, status')
       .eq('brand_id', profile.brand_id)
       .eq('trainer_id', trainerId)
       .in('status', ['active', 'grace_period'])
@@ -132,20 +121,36 @@ export async function getTrainerActiveMembers(
       (memberProfiles ?? []).map((p) => [p.id, { full_name: p.full_name, avatar_url: p.avatar_url }])
     )
 
-    type AssignmentSelectRow = Pick<PTAssignmentRow, 'id' | 'member_id' | 'membership_id' | 'assigned_at' | 'status'> & {
-      membership: { pt_sessions_remaining: number | null; pt_sessions_expires_at: string | null; membership_packages: { name: string; package_category: string } | null } | null
+    // Fetch active PT memberships directly by member_id — not via the assignment FK
+    // which may be stale when PT credits were stacked onto a pre-existing membership.
+    type ActivePTMem = { member_id: string; id: string; pt_sessions_remaining: number | null; pt_sessions_expires_at: string | null; membership_packages: { name: string; package_category: string } | null }
+    const membershipMap: Record<string, ActivePTMem> = {}
+    if (memberIds.length > 0) {
+      const { data: activeMems } = await supabase
+        .from('memberships')
+        .select('member_id, id, pt_sessions_remaining, pt_sessions_expires_at, membership_packages(name, package_category)')
+        .in('member_id', memberIds)
+        .eq('brand_id', profile.brand_id)
+        .in('package_category', ['pt_sessions', 'bundled'])
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+      for (const m of ((activeMems ?? []) as ActivePTMem[])) {
+        if (!membershipMap[m.member_id]) membershipMap[m.member_id] = m
+      }
     }
+
+    type AssignmentSelectRow = Pick<PTAssignmentRow, 'id' | 'member_id' | 'membership_id' | 'assigned_at' | 'status'>
     const data = rows as unknown as AssignmentSelectRow[]
 
     const result: TrainerActiveMember[] = data.map((row) => {
       const mp  = profileMap[row.member_id]
-      const mem = row.membership
+      const mem = membershipMap[row.member_id]
       return {
         assignment_id:          row.id,
         member_id:              row.member_id,
         member_name:            mp?.full_name ?? 'Unknown',
         member_avatar_url:      mp?.avatar_url ?? null,
-        membership_id:          row.membership_id,
+        membership_id:          mem?.id ?? row.membership_id,
         package_name:           mem?.membership_packages?.name ?? '',
         package_category:       mem?.membership_packages?.package_category ?? '',
         pt_sessions_remaining:  mem?.pt_sessions_remaining ?? null,
