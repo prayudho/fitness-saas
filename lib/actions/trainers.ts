@@ -698,9 +698,105 @@ export async function getMemberPTData(): Promise<{ data: MemberPTData | null; er
   }
 }
 
+// ── getTrainerClasses ─────────────────────────────────────────────────────────
+// Returns group classes where this trainer is the assigned instructor.
+export type TrainerClassItem = {
+  id: string
+  scheduled_at: string
+  duration_minutes: number
+  status: string
+  room: string | null
+  capacity: number
+  booked_count: number
+  class_type: { id: string; name: string; color: string | null; icon: string | null } | null
+}
+
+export async function getTrainerClasses(
+  trainerId: string,
+  filters?: { month?: string }
+): Promise<{ data: TrainerClassItem[]; error?: string }> {
+  try {
+    const supabase = createClient()
+    const { profile } = await getAuthedProfile(supabase)
+    if (!profile.brand_id) return { data: [], error: 'No brand context' }
+
+    let query = supabase
+      .from('classes')
+      .select(`
+        id, scheduled_at, duration_minutes, status, room, capacity,
+        class_types!class_type_id(id, name, color, icon),
+        class_bookings(id, status)
+      `)
+      .eq('instructor_id', trainerId)
+      .eq('brand_id', profile.brand_id)
+      .order('scheduled_at', { ascending: false })
+
+    if (filters?.month) {
+      const d = new Date(filters.month)
+      const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString()
+      const end   = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).toISOString()
+      query = query.gte('scheduled_at', start).lte('scheduled_at', end)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+
+    type RawClass = {
+      id: string
+      scheduled_at: string
+      duration_minutes: number
+      status: string
+      room: string | null
+      capacity: number
+      class_types: { id: string; name: string; color: string | null; icon: string | null } | null
+      class_bookings: { id: string; status: string }[] | null
+    }
+
+    return {
+      data: (data ?? []).map((cls) => {
+        const c = cls as unknown as RawClass
+        return {
+          id: c.id,
+          scheduled_at: c.scheduled_at,
+          duration_minutes: c.duration_minutes,
+          status: c.status,
+          room: c.room,
+          capacity: c.capacity,
+          booked_count: (c.class_bookings ?? []).filter(
+            (b) => b.status === 'booked' || b.status === 'attended'
+          ).length,
+          class_type: c.class_types,
+        }
+      }),
+    }
+  } catch (e) {
+    return { data: [], error: e instanceof Error ? e.message : 'An error occurred' }
+  }
+}
+
+// Returns '+HH:MM' or '-HH:MM' UTC offset for an IANA timezone name at a given date.
+function getUtcOffsetString(timezone: string, refDate: Date): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en', {
+      timeZone: timezone,
+      timeZoneName: 'shortOffset',
+    }).formatToParts(refDate)
+    const tzName = parts.find((p) => p.type === 'timeZoneName')?.value ?? ''
+    const match = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(tzName)
+    if (!match) return '+00:00'
+    const sign = match[1]
+    const h    = String(parseInt(match[2])).padStart(2, '0')
+    const m    = match[3] ?? '00'
+    return `${sign}${h}:${m}`
+  } catch {
+    return '+00:00'
+  }
+}
+
 // ── getAvailableSlots ─────────────────────────────────────────────────────────
 // Returns open time slots for a trainer on a given date, based on their weekly
-// recurring availability minus already-booked sessions.
+// recurring availability minus already-booked sessions and assigned group classes.
+// Times are returned as timezone-aware ISO strings so Supabase stores them correctly.
 export async function getAvailableSlots(
   trainerId: string,
   dateStr: string,       // YYYY-MM-DD (caller's local date)
@@ -712,8 +808,21 @@ export async function getAvailableSlots(
     if (!profile.brand_id) return { data: [], error: 'No brand context' }
     const brandId = profile.brand_id
 
+    // Fetch brand timezone so slot times are stored in the correct local time
+    const { data: brandRow } = await supabase
+      .from('brands')
+      .select('timezone')
+      .eq('id', brandId)
+      .single()
+    const timezone = (brandRow as { timezone: string } | null)?.timezone ?? 'Asia/Jakarta'
+
+    // Compute UTC offset string (e.g. '+07:00') for the brand timezone at this date.
+    // Using noon UTC as reference avoids midnight DST edge cases.
+    const refDate   = new Date(dateStr + 'T12:00:00Z')
+    const tzOffset  = getUtcOffsetString(timezone, refDate)
+
     // Get trainer's weekly recurring slots for this day of week
-    const dayOfWeek = new Date(dateStr + 'T12:00:00').getDay() // noon avoids DST edge
+    const dayOfWeek = refDate.getDay()
     const { data: rawAvail } = await supabase
       .from('trainer_availability')
       .select('start_time, end_time')
@@ -725,7 +834,7 @@ export async function getAvailableSlots(
 
     if (!avail || avail.length === 0) return { data: [] }
 
-    // Fetch booked sessions with a ±1 day window to safely handle timezone differences
+    // Fetch booked PT sessions on that date (broad UTC window, conflict check is ms-exact)
     const { data: rawBooked } = await supabase
       .from('trainer_sessions')
       .select('scheduled_at, duration_minutes')
@@ -735,13 +844,29 @@ export async function getAvailableSlots(
       .gte('scheduled_at', `${dateStr}T00:00:00`)
       .lt('scheduled_at', `${dateStr}T24:00:00`)
 
-    type BookedSession = { scheduled_at: string; duration_minutes: number | null }
-    const booked = rawBooked as BookedSession[] | null
+    // Fetch group classes the trainer is instructing on that date
+    const { data: rawClasses } = await supabase
+      .from('classes')
+      .select('scheduled_at, duration_minutes')
+      .eq('instructor_id', trainerId)
+      .eq('brand_id', brandId)
+      .neq('status', 'cancelled')
+      .gte('scheduled_at', `${dateStr}T00:00:00`)
+      .lt('scheduled_at', `${dateStr}T24:00:00`)
 
-    const bookedRanges = (booked ?? []).map((s) => ({
-      start: new Date(s.scheduled_at).getTime(),
-      end:   new Date(s.scheduled_at).getTime() + (s.duration_minutes ?? 60) * 60000,
-    }))
+    type BookedItem = { scheduled_at: string; duration_minutes: number | null }
+    const booked  = rawBooked  as BookedItem[] | null
+    const classes = rawClasses as BookedItem[] | null
+
+    const toRange = (item: BookedItem) => ({
+      start: new Date(item.scheduled_at).getTime(),
+      end:   new Date(item.scheduled_at).getTime() + (item.duration_minutes ?? 60) * 60000,
+    })
+
+    const blockedRanges = [
+      ...(booked  ?? []).map(toRange),
+      ...(classes ?? []).map(toRange),
+    ]
 
     const now = new Date()
     const slots: { time: string; label: string }[] = []
@@ -758,7 +883,8 @@ export async function getAvailableSlots(
         if (slotEndMin > availEndMin) break
 
         const pad = (n: number) => String(n).padStart(2, '0')
-        const timeStr = `${dateStr}T${pad(curH)}:${pad(curM)}:00`
+        // Include timezone offset so Supabase stores the correct UTC timestamp
+        const timeStr = `${dateStr}T${pad(curH)}:${pad(curM)}:00${tzOffset}`
         const slotDate = new Date(timeStr)
 
         // Skip past times
@@ -766,7 +892,7 @@ export async function getAvailableSlots(
           const slotStart = slotDate.getTime()
           const slotEnd   = slotStart + durationMinutes * 60000
 
-          const conflict = bookedRanges.some(
+          const conflict = blockedRanges.some(
             (b) => slotStart < b.end && slotEnd > b.start
           )
 

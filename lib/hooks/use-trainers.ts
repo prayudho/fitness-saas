@@ -15,6 +15,7 @@ import {
   updateSessionStatus,
   getTrainerSessions,
   getMemberPTBookings,
+  getTrainerClasses,
 } from '@/lib/actions/trainers'
 
 export function useTrainers() {
@@ -181,6 +182,18 @@ export function useAvailableSlots(
     },
     enabled: Boolean(trainerId) && Boolean(dateStr),
     staleTime: 30_000,
+  })
+}
+
+export function useTrainerClasses(trainerId: string, filters?: { month?: string }) {
+  return useQuery({
+    queryKey: ['trainer-classes', trainerId, filters],
+    queryFn: async () => {
+      const result = await getTrainerClasses(trainerId, filters)
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    enabled: Boolean(trainerId),
   })
 }
 
