@@ -1247,6 +1247,84 @@ export type Database = {
           },
         ]
       }
+      exercises: {
+        Row: {
+          id:                string
+          brand_id:          string
+          name:              string
+          category:          string
+          muscle_groups:     string[]
+          secondary_muscles: string[]
+          equipment:         string | null
+          instructions:      string | null
+          created_by:        string | null
+          created_at:        string
+        }
+        Insert: {
+          id?:               string
+          brand_id:          string
+          name:              string
+          category:          string
+          muscle_groups?:    string[]
+          secondary_muscles?: string[]
+          equipment?:        string | null
+          instructions?:     string | null
+          created_by?:       string | null
+          created_at?:       string
+        }
+        Update: {
+          id?:               string
+          brand_id?:         string
+          name?:             string
+          category?:         string
+          muscle_groups?:    string[]
+          secondary_muscles?: string[]
+          equipment?:        string | null
+          instructions?:     string | null
+          created_by?:       string | null
+          created_at?:       string
+        }
+        Relationships: []
+      }
+      workout_logs: {
+        Row: {
+          id:                 string
+          brand_id:           string
+          trainer_session_id: string | null
+          trainer_id:         string
+          member_id:          string
+          exercises:          Json
+          duration_minutes:   number | null
+          notes:              string | null
+          created_at:         string
+          updated_at:         string
+        }
+        Insert: {
+          id?:                string
+          brand_id:           string
+          trainer_session_id?: string | null
+          trainer_id:         string
+          member_id:          string
+          exercises?:         Json
+          duration_minutes?:  number | null
+          notes?:             string | null
+          created_at?:        string
+          updated_at?:        string
+        }
+        Update: {
+          id?:                string
+          brand_id?:          string
+          trainer_session_id?: string | null
+          trainer_id?:        string
+          member_id?:         string
+          exercises?:         Json
+          duration_minutes?:  number | null
+          notes?:             string | null
+          created_at?:        string
+          updated_at?:        string
+        }
+        Relationships: []
+      }
       trainer_sessions: {
         Row: {
           brand_id: string

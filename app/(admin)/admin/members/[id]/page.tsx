@@ -13,6 +13,7 @@ import { ArrowLeft, Pencil, Phone, Calendar, Shield, User } from 'lucide-react'
 import { ResetPasswordDialog } from '@/components/members/reset-password-dialog'
 import { PTAssignmentCard } from '@/components/pt-assignment/pt-assignment-card'
 import { MemberInvoicesTab } from '@/components/members/member-invoices-tab'
+import { MemberWorkoutHistory } from '@/components/members/member-workout-history'
 
 interface PageProps {
   params: { id: string }
@@ -75,6 +76,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
               <TabsTrigger value="checkins">Check-ins</TabsTrigger>
               <TabsTrigger value="invoices">Invoices</TabsTrigger>
               <TabsTrigger value="pt-sessions">PT Sessions</TabsTrigger>
+              <TabsTrigger value="workouts">Workouts</TabsTrigger>
             </TabsList>
 
             {/* Profile Tab */}
@@ -279,6 +281,11 @@ export default async function MemberDetailPage({ params }: PageProps) {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* Workout History Tab */}
+            <TabsContent value="workouts">
+              <MemberWorkoutHistory memberId={params.id} />
             </TabsContent>
           </Tabs>
         </div>

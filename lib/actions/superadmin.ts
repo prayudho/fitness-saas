@@ -244,6 +244,9 @@ export async function createBrand(data: {
       return { error: profileError.message }
     }
 
+    // Seed the exercise library for this new brand (non-fatal if it fails)
+    await supabase.rpc('seed_brand_exercises', { p_brand_id: brand.id }).catch(() => null)
+
     revalidatePath('/superadmin/brands')
     return { error: null, brandId: brand.id }
   } catch (err) {

@@ -401,5 +401,6 @@ Update this section as you build each module.
 | Email automation | ✅ | ✅ | ✅ | ⬜ |
 | Team management | ✅ | ✅ | ✅ | ⬜ |
 | Member registration (admin) | ✅ | ✅ | ✅ | ⬜ |
+| Workout recording | ✅ | ✅ | ✅ | ⬜ |
 
 Legend: ⬜ not started · 🔄 in progress · ✅ done

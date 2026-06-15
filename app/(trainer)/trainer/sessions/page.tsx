@@ -41,7 +41,8 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
-import { CalendarPlus, MoreHorizontal, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import Link from 'next/link'
+import { CalendarPlus, MoreHorizontal, CheckCircle, XCircle, AlertCircle, ClipboardList } from 'lucide-react'
 import {
   useTrainerSessions,
   useUpdateSessionStatus,
@@ -414,6 +415,20 @@ export default function TrainerSessionsPage() {
           <span className="text-sm text-green-600">
             {val != null ? formatCurrency(val) : '—'}
           </span>
+        )
+      },
+    },
+    {
+      id: 'log',
+      header: '',
+      cell: ({ row }) => {
+        if (row.original.status !== 'completed') return null
+        return (
+          <Button asChild variant="ghost" size="sm" title="Log workout">
+            <Link href={`/trainer/sessions/${row.original.id}/log`}>
+              <ClipboardList className="h-4 w-4" />
+            </Link>
+          </Button>
         )
       },
     },
