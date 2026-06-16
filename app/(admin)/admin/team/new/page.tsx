@@ -40,7 +40,7 @@ export default function NewTeamMemberPage() {
   const [isPending, setIsPending] = useState(false)
 
   const { data: customRoles } = useCustomRoles(brandId ?? '')
-  const { data: branchData, isLoading: branchLoading, isError: branchError, error: branchErr } = useBranchList()
+  const { data: branchData } = useBranchList()
 
   const form = useForm<InviteTeamMemberInput>({
     resolver: zodResolver(inviteTeamMemberSchema),
@@ -107,11 +107,6 @@ export default function NewTeamMemberPage() {
           Create an account and send login credentials to a new team member.
         </p>
       </div>
-
-      {/* DEBUG: remove after fix */}
-      <pre className="text-xs bg-yellow-50 p-2 rounded border border-yellow-200 overflow-auto max-h-24">
-        isMultiBranch={String(isMultiBranch)} | loading={String(branchLoading)} | error={String(branchError)} | errMsg={branchErr instanceof Error ? branchErr.message : String(branchErr)} | branchData={JSON.stringify(branchData)}
-      </pre>
 
       <Card>
         <CardHeader>

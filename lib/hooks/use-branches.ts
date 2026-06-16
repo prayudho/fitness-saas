@@ -27,7 +27,7 @@ export function useBranches() {
 export function useBranchList() {
   return useQuery({
     queryKey: ['branches', 'slim'],
-    queryFn: getBranchList,
+    queryFn: () => getBranchList(),
     staleTime: 60_000,
   })
 }
