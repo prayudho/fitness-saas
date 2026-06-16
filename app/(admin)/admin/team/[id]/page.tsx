@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format } from 'date-fns'
 import { ArrowLeft, Loader2, Mail, Phone, Calendar, ShieldCheck } from 'lucide-react'
@@ -17,6 +17,7 @@ import {
   useDeactivateTeamMember,
   useReactivateTeamMember,
 } from '@/lib/hooks/use-team'
+import { useBranchList } from '@/lib/hooks/use-branches'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -64,9 +65,13 @@ export default function TeamMemberDetailPage() {
 
   const { data: member, isLoading } = useTeamMember(id)
   const { data: customRoles } = useCustomRoles(brandId ?? '')
+  const { data: branchData } = useBranchList()
   const updateMutation = useUpdateTeamMember()
   const deactivate = useDeactivateTeamMember()
   const reactivate = useReactivateTeamMember()
+
+  const isMultiBranch = branchData?.isMultiBranch ?? false
+  const branches = branchData?.data ?? []
 
   const form = useForm<UpdateTeamMemberInput>({
     resolver: zodResolver(updateTeamMemberSchema),
@@ -75,10 +80,11 @@ export default function TeamMemberDetailPage() {
       phone: '',
       role: undefined,
       customRoleId: undefined,
+      branchId: undefined,
     },
   })
 
-  const watchedRole = form.watch('role')
+  const watchedRole = useWatch({ control: form.control, name: 'role' })
 
   useEffect(() => {
     if (member) {
@@ -87,6 +93,7 @@ export default function TeamMemberDetailPage() {
         phone: member.phone ?? '',
         role: member.role as UpdateTeamMemberInput['role'],
         customRoleId: member.custom_role_id ?? undefined,
+        branchId: undefined,
       })
     }
   }, [member, form])
@@ -134,6 +141,7 @@ export default function TeamMemberDetailPage() {
 
   const hasCustomRoles = (customRoles ?? []).length > 0
   const showCustomRoleSelect = watchedRole === 'support' && hasCustomRoles
+  const showBranchSelect = isMultiBranch && ['staff', 'trainer', 'branch_manager'].includes(watchedRole ?? '')
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -247,8 +255,9 @@ export default function TeamMemberDetailPage() {
                         <Select
                           onValueChange={(val) => {
                             field.onChange(val)
-                            if (val !== 'support') {
-                              form.setValue('customRoleId', undefined)
+                            if (val !== 'support') form.setValue('customRoleId', undefined)
+                            if (!['staff', 'trainer', 'branch_manager'].includes(val)) {
+                              form.setValue('branchId', undefined)
                             }
                           }}
                           value={field.value}
@@ -262,6 +271,9 @@ export default function TeamMemberDetailPage() {
                             <SelectItem value="admin">Admin</SelectItem>
                             <SelectItem value="staff">Staff</SelectItem>
                             <SelectItem value="trainer">Trainer</SelectItem>
+                            {isMultiBranch && (
+                              <SelectItem value="branch_manager">Branch Manager</SelectItem>
+                            )}
                             <SelectItem value="support">Support</SelectItem>
                           </SelectContent>
                         </Select>
@@ -287,6 +299,38 @@ export default function TeamMemberDetailPage() {
                               {(customRoles ?? []).map((cr) => (
                                 <SelectItem key={cr.id} value={cr.id}>
                                   Custom: {cr.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
+                  {showBranchSelect && (
+                    <FormField
+                      control={form.control}
+                      name="branchId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            {watchedRole === 'branch_manager' ? 'Managed Branch' : 'Home Branch'}
+                            {watchedRole !== 'branch_manager' && (
+                              <span className="text-muted-foreground font-normal"> (optional)</span>
+                            )}
+                          </FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select branch" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {branches.map((b) => (
+                                <SelectItem key={b.id} value={b.id}>
+                                  {b.name}
                                 </SelectItem>
                               ))}
                             </SelectContent>

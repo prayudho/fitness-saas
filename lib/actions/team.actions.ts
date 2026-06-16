@@ -203,7 +203,7 @@ export async function updateTeamMember(
     return { data: null, error: parsed.error.errors[0]?.message ?? 'Validation error' }
   }
 
-  const { fullName, phone, role, customRoleId } = parsed.data
+  const { fullName, phone, role, customRoleId, branchId } = parsed.data
   const supabase = createServiceClient()
 
   // Derive caller's brand so we scope the update to the correct profile row
@@ -216,8 +216,16 @@ export async function updateTeamMember(
     .update({
       ...(fullName !== undefined && { full_name: fullName }),
       ...(phone !== undefined && { phone }),
-      ...(role !== undefined && { role: role as 'admin' | 'staff' | 'trainer' | 'support' | 'member' }),
+      ...(role !== undefined && { role: role as Database['public']['Enums']['user_role'] }),
       ...(customRoleId !== undefined && { custom_role_id: customRoleId }),
+      // Keep branch assignments in sync when the role changes
+      ...(role === 'branch_manager' && { branch_id: branchId ?? null, home_branch_id: null }),
+      ...(role === 'staff' || role === 'trainer' ? { home_branch_id: branchId ?? null, branch_id: null } : {}),
+      // Clear branch fields when switching to a non-branch role
+      ...(role !== undefined && !['branch_manager', 'staff', 'trainer'].includes(role) && {
+        branch_id: null,
+        home_branch_id: null,
+      }),
     })
     .eq('id', id)
     .eq('brand_id', callerProfile.brand_id)
