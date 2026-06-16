@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm, useWatch } from 'react-hook-form'
@@ -56,6 +56,12 @@ export default function NewTeamMemberPage() {
     },
   })
 
+  // brandId from useRole() resolves asynchronously after mount.
+  // defaultValues only runs once, so we must push the resolved value into the form.
+  useEffect(() => {
+    if (brandId) form.setValue('brandId', brandId)
+  }, [brandId, form])
+
   const watchedRole = useWatch({ control: form.control, name: 'role' })
   const watchedEmail = useWatch({ control: form.control, name: 'email' })
 
@@ -66,9 +72,13 @@ export default function NewTeamMemberPage() {
   const showBranchSelect = isMultiBranch && ['staff', 'trainer', 'branch_manager'].includes(watchedRole)
 
   async function onSubmit(data: InviteTeamMemberInput) {
+    if (!brandId) {
+      toast.error('Brand context not loaded. Please refresh the page and try again.')
+      return
+    }
     setIsPending(true)
     try {
-      const result = await inviteTeamMember({ ...data, brandId: brandId ?? '' })
+      const result = await inviteTeamMember({ ...data, brandId })
       if (result.error) {
         toast.error(result.error)
         return
@@ -292,7 +302,7 @@ export default function NewTeamMemberPage() {
               )}
 
               <div className="flex gap-3 pt-2">
-                <Button type="submit" disabled={isPending}>
+                <Button type="submit" disabled={isPending || !brandId}>
                   {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Send Invite
                 </Button>

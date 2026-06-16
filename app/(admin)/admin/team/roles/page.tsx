@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -138,6 +138,10 @@ function RoleForm({ defaultValues, onSubmit, isPending, brandId }: RoleFormProps
       ? { brandId, name: defaultValues.name, permissions: defaultValues.permissions }
       : { brandId, name: '', permissions: { ...DEFAULT_PERMISSIONS } },
   })
+
+  useEffect(() => {
+    if (brandId) form.setValue('brandId', brandId)
+  }, [brandId, form])
 
   async function handleSubmit(data: CreateCustomRoleInput) {
     await onSubmit({ name: data.name, permissions: data.permissions as Record<PermissionKey, boolean> })
