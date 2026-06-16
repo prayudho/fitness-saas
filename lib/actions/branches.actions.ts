@@ -1,5 +1,6 @@
 'use server'
 
+import { cookies } from 'next/headers'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getAuthedProfile } from '@/lib/actions/utils'
@@ -39,21 +40,21 @@ export async function getBranches(): Promise<{
   error: string | null
 }> {
   try {
-    const supabase = createClient()
-    const { profile } = await getAuthedProfile(supabase)
-    if (!profile.brand_id) return { data: [], isMultiBranch: false, error: 'No brand context' }
+    const brandId = cookies().get('__fp_brand_id')?.value ?? null
+    if (!brandId) return { data: [], isMultiBranch: false, error: 'No brand context' }
 
+    const supabase = createClient()
     const svc = createServiceClient()
     const [branchesResult, brandResult] = await Promise.all([
       svc
         .from('branches')
         .select('*')
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .order('created_at', { ascending: true }),
       svc
         .from('brands')
         .select('is_multi_branch')
-        .eq('id', profile.brand_id)
+        .eq('id', brandId)
         .single(),
     ])
 
@@ -86,7 +87,7 @@ export async function getBranches(): Promise<{
       supabase
         .from('memberships')
         .select('branch_id' as never)
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .eq('gym_access_status', 'active'),
       supabase
         .from('invoices')
@@ -137,23 +138,22 @@ export async function getBranches(): Promise<{
 
 export async function getBranchList(): Promise<{ data: BranchRow[]; isMultiBranch: boolean }> {
   try {
-    const supabase = createClient()
-    const { profile } = await getAuthedProfile(supabase)
-    if (!profile.brand_id) return { data: [], isMultiBranch: false }
+    // Read brand_id directly from cookie — supports superadmin users who have no branded profile
+    const brandId = cookies().get('__fp_brand_id')?.value ?? null
+    if (!brandId) return { data: [], isMultiBranch: false }
 
-    // Use service client so RLS / header state cannot silently return wrong results
     const svc = createServiceClient()
     const [branchesResult, brandResult] = await Promise.all([
       svc
         .from('branches')
         .select('id, name, is_active')
-        .eq('brand_id', profile.brand_id)
+        .eq('brand_id', brandId)
         .eq('is_active', true)
         .order('name', { ascending: true }),
       svc
         .from('brands')
         .select('is_multi_branch')
-        .eq('id', profile.brand_id)
+        .eq('id', brandId)
         .single(),
     ])
 
