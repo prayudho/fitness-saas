@@ -43,13 +43,14 @@ export async function getBranches(): Promise<{
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: [], isMultiBranch: false, error: 'No brand context' }
 
+    const svc = createServiceClient()
     const [branchesResult, brandResult] = await Promise.all([
-      supabase
-        .from('branches' as never)
+      svc
+        .from('branches')
         .select('*')
         .eq('brand_id', profile.brand_id)
         .order('created_at', { ascending: true }),
-      supabase
+      svc
         .from('brands')
         .select('is_multi_branch')
         .eq('id', profile.brand_id)
@@ -64,7 +65,7 @@ export async function getBranches(): Promise<{
     if (branchIds.length === 0) {
       return {
         data: [],
-        isMultiBranch: (brandResult.data as { is_multi_branch: boolean } | null)?.is_multi_branch ?? false,
+        isMultiBranch: brandResult.data?.is_multi_branch ?? false,
         error: null,
       }
     }
@@ -122,7 +123,7 @@ export async function getBranches(): Promise<{
 
     return {
       data,
-      isMultiBranch: (brandResult.data as { is_multi_branch: boolean } | null)?.is_multi_branch ?? false,
+      isMultiBranch: brandResult.data?.is_multi_branch ?? false,
       error: null,
     }
   } catch (err) {
@@ -140,14 +141,16 @@ export async function getBranchList(): Promise<{ data: BranchRow[]; isMultiBranc
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: [], isMultiBranch: false }
 
+    // Use service client so RLS / header state cannot silently return wrong results
+    const svc = createServiceClient()
     const [branchesResult, brandResult] = await Promise.all([
-      supabase
-        .from('branches' as never)
+      svc
+        .from('branches')
         .select('id, name, is_active')
         .eq('brand_id', profile.brand_id)
         .eq('is_active', true)
         .order('name', { ascending: true }),
-      supabase
+      svc
         .from('brands')
         .select('is_multi_branch')
         .eq('id', profile.brand_id)
@@ -156,7 +159,7 @@ export async function getBranchList(): Promise<{ data: BranchRow[]; isMultiBranc
 
     return {
       data: (branchesResult.data ?? []) as BranchRow[],
-      isMultiBranch: (brandResult.data as { is_multi_branch: boolean } | null)?.is_multi_branch ?? false,
+      isMultiBranch: brandResult.data?.is_multi_branch ?? false,
     }
   } catch {
     return { data: [], isMultiBranch: false }
