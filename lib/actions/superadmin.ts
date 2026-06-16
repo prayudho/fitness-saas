@@ -64,39 +64,44 @@ export async function getBrandsList(opts: {
 
     if (error) throw error
 
-    // Enrich with owner email via auth.users
-    const enriched: BrandWithOwner[] = await Promise.all(
-      (brands ?? []).map(async (brand) => {
-        let owner_email: string | null = null
-        let owner_full_name: string | null = null
+    const brandList = brands ?? []
+    const brandIds   = brandList.map((b) => b.id)
+    const ownerIds   = brandList.map((b) => b.owner_user_id).filter(Boolean) as string[]
 
-        if (brand.owner_user_id) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name')
-            .eq('id', brand.owner_user_id)
-            .single()
+    // T13: batch all enrichment queries — one round-trip each instead of N per brand
+    const [ownerProfilesResult, memberCountsResult, ownerAuthResults] = await Promise.all([
+      // Batch owner profile names
+      ownerIds.length > 0
+        ? supabase.from('profiles').select('id, full_name').in('id', ownerIds)
+        : Promise.resolve({ data: [] }),
 
-          const { data: userResp } = await supabase.auth.admin.getUserById(brand.owner_user_id)
-          owner_email = userResp?.user?.email ?? null
-          owner_full_name = profile?.full_name ?? null
-        }
+      // Batch member counts — fetch all member profiles for these brands, aggregate in memory
+      brandIds.length > 0
+        ? supabase.from('profiles').select('brand_id').in('brand_id', brandIds).eq('role', 'member')
+        : Promise.resolve({ data: [] }),
 
-        // Count members for this brand
-        const { count: memberCount } = await supabase
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .eq('brand_id', brand.id)
-          .eq('role', 'member')
+      // Auth user lookups are unavoidably N (no batch API), but run in parallel
+      Promise.all(
+        ownerIds.map((id) => supabase.auth.admin.getUserById(id).then((r) => ({ id, email: r.data?.user?.email ?? null })))
+      ),
+    ])
 
-        return {
-          ...brand,
-          owner_email,
-          owner_full_name,
-          member_count: memberCount ?? 0,
-        }
-      })
+    const profileMap = new Map(
+      ((ownerProfilesResult as { data: { id: string; full_name: string | null }[] | null }).data ?? []).map((p) => [p.id, p.full_name])
     )
+    const emailMap = new Map(ownerAuthResults.map((r) => [r.id, r.email]))
+
+    const memberCountMap = new Map<string, number>()
+    for (const p of ((memberCountsResult as { data: { brand_id: string }[] | null }).data ?? [])) {
+      memberCountMap.set(p.brand_id, (memberCountMap.get(p.brand_id) ?? 0) + 1)
+    }
+
+    const enriched: BrandWithOwner[] = brandList.map((brand) => ({
+      ...brand,
+      owner_full_name: brand.owner_user_id ? (profileMap.get(brand.owner_user_id) ?? null) : null,
+      owner_email:     brand.owner_user_id ? (emailMap.get(brand.owner_user_id)   ?? null) : null,
+      member_count:    memberCountMap.get(brand.id) ?? 0,
+    }))
 
     return { data: enriched, total: count ?? 0, page }
   } catch (err) {
@@ -243,6 +248,12 @@ export async function createBrand(data: {
       await supabase.from('brands').delete().eq('id', brand.id)
       return { error: profileError.message }
     }
+
+    // Seed Main Branch for the new brand (T5: every brand gets one on creation)
+    try {
+      // @ts-expect-error — branches not yet in generated types; resolved after supabase gen types
+      await supabase.from('branches').insert({ brand_id: brand.id, name: 'Main Branch', is_active: true })
+    } catch { /* non-fatal — migration 023 backfill covers existing brands */ }
 
     // Seed the exercise library for this new brand (non-fatal if it fails)
     try { await supabase.rpc('seed_brand_exercises', { p_brand_id: brand.id }) } catch { /* ignore */ }

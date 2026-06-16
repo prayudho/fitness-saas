@@ -12,7 +12,7 @@ import {
   assignPackage,
 } from '@/lib/actions/members'
 
-export function useMembers(filters?: { search?: string; status?: string; page?: number }) {
+export function useMembers(filters?: { search?: string; status?: string; branchId?: string; page?: number }) {
   return useQuery({
     queryKey: ['members', filters],
     queryFn: async () => {

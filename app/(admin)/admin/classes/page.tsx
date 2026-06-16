@@ -41,6 +41,14 @@ import {
   useUpdateClassType,
   useDeleteClassType,
 } from '@/lib/hooks/use-classes'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { useBranchList } from '@/lib/hooks/use-branches'
 import type { ClassTypeRow } from '@/lib/actions/classes'
 
 function getMonday(date: Date): Date {
@@ -148,9 +156,12 @@ export default function ClassesPage() {
   const [isAddClassOpen, setIsAddClassOpen] = useState(false)
   const [isManageTypesOpen, setIsManageTypesOpen] = useState(false)
   const [editingType, setEditingType] = useState<ClassTypeRow | null>(null)
+  const [branchId, setBranchId] = useState('all')
 
+  const { data: branchData } = useBranchList()
   const { data: classes = [], isLoading } = useClasses({
     weekStart: weekStart.toISOString(),
+    branchId:  branchId !== 'all' ? branchId : undefined,
   })
   const { data: classTypes = [] } = useClassTypes()
   const createClassType = useCreateClassType()
@@ -168,7 +179,20 @@ export default function ClassesPage() {
         title="Class Schedule"
         description="Manage group fitness classes and bookings"
         action={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap items-center">
+            {branchData?.isMultiBranch && (branchData.data?.length ?? 0) > 0 && (
+              <Select value={branchId} onValueChange={setBranchId}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="All Branches" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Branches</SelectItem>
+                  {(branchData.data ?? []).map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Button variant="outline" size="sm" onClick={() => setIsManageTypesOpen(true)}>
               <Settings2 className="h-4 w-4 mr-1.5" />
               Manage Class Types

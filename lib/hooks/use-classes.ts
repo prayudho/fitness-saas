@@ -92,7 +92,7 @@ export function useDeleteClassType() {
 // CLASSES
 // ─────────────────────────────────────────────
 
-export function useClasses(filters?: { weekStart?: string; classTypeId?: string }) {
+export function useClasses(filters?: { weekStart?: string; classTypeId?: string; branchId?: string }) {
   return useQuery({
     queryKey: ['classes', filters],
     queryFn: async (): Promise<ClassWithDetails[]> => {

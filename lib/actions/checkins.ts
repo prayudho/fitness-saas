@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { getAuthedProfile } from '@/lib/actions/utils'
+import { getAuthedProfile, getBranchContext } from '@/lib/actions/utils'
 import { checkMemberAccessStatus, type MemberAccessStatus } from '@/lib/actions/membership.actions'
 import type { Database } from '@/types/database'
 
@@ -42,6 +42,7 @@ export { MemberAccessStatus }
 export async function processCheckin(input: {
   member_id: string
   method: 'qr' | 'staff' | 'gate'
+  branchId?: string
 }): Promise<CheckinResult> {
   try {
     const supabase = createClient()
@@ -55,6 +56,13 @@ export async function processCheckin(input: {
       }
     }
     const brandId = staffProfile.brand_id
+
+    // Resolve branch context: explicit override > staff primary branch
+    let branchId = input.branchId ?? null
+    if (!branchId) {
+      const ctx = await getBranchContext(supabase)
+      branchId = ctx.branchId
+    }
 
     // Fetch member profile
     const { data: rawMemberProfile, error: profileError } = await supabase
@@ -153,13 +161,14 @@ export async function processCheckin(input: {
         : null
 
     await supabase.from('checkins').insert({
-      brand_id:       brandId,
-      member_id:      input.member_id,
-      membership_id:  membership.id,
-      method:         input.method,
-      checked_in_at:  new Date().toISOString(),
-      staff_override: null,
+      brand_id:        brandId,
+      member_id:       input.member_id,
+      membership_id:   membership.id,
+      method:          input.method,
+      checked_in_at:   new Date().toISOString(),
+      staff_override:  null,
       warning_message: warningMessage,
+      ...(branchId ? { branch_id: branchId } : {}),
     } as never)
 
     revalidatePath('/staff/checkin')
@@ -206,12 +215,19 @@ export async function recordCheckinWithOverride(input: {
   method: 'qr' | 'staff' | 'gate'
   allowed: boolean
   warning_message: string | null
+  branchId?: string
 }): Promise<{ error?: string }> {
   try {
     const supabase = createClient()
     const { profile: staffProfile } = await getAuthedProfile(supabase)
     if (!staffProfile.brand_id) return { error: 'No brand context' }
     const brandId2 = staffProfile.brand_id
+
+    let branchId = input.branchId ?? null
+    if (!branchId) {
+      const ctx = await getBranchContext(supabase)
+      branchId = ctx.branchId
+    }
 
     await supabase.from('checkins').insert({
       brand_id:        brandId2,
@@ -221,6 +237,7 @@ export async function recordCheckinWithOverride(input: {
       checked_in_at:   new Date().toISOString(),
       staff_override:  input.allowed,
       warning_message: input.warning_message,
+      ...(branchId ? { branch_id: branchId } : {}),
     } as never)
 
     revalidatePath('/staff/checkin')
@@ -256,19 +273,34 @@ export async function searchMemberForCheckin(
 }
 
 export async function getCheckinLog(
-  limit = 50
+  limit = 50,
+  filters?: { dateFilter?: 'today' | 'week' | 'all'; branchId?: string }
 ): Promise<{ data: CheckinWithProfile[]; error?: string }> {
   try {
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: [], error: 'No brand context' }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('checkins')
       .select('*, profiles!checkins_member_brand_fkey(full_name, avatar_url)')
       .eq('brand_id', profile.brand_id)
       .order('checked_in_at', { ascending: false })
       .limit(limit)
+
+    if (filters?.branchId) {
+      query = query.eq('branch_id' as never, filters.branchId)
+    }
+
+    if (filters?.dateFilter === 'today') {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+      query = query.gte('checked_in_at', todayStart.toISOString())
+    } else if (filters?.dateFilter === 'week') {
+      const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - 7)
+      query = query.gte('checked_in_at', weekStart.toISOString())
+    }
+
+    const { data, error } = await query
 
     if (error) return { data: [], error: error.message }
 
@@ -314,6 +346,8 @@ export async function createWalkinPass(
     if (!profile.brand_id) return { error: 'No brand context' }
     const brandId = profile.brand_id
 
+    const { branchId } = await getBranchContext(supabase)
+
     const { data: rawPkg, error: pkgError } = await supabase
       .from('membership_packages')
       .select('*')
@@ -344,6 +378,7 @@ export async function createWalkinPass(
         gym_access_expires_at: `${today}T23:59:59.999Z`,
         gym_access_status:     'active',
         pt_sessions_status:    'active',
+        ...(branchId ? { branch_id: branchId } : {}),
       } as never)
       .select()
       .single()
@@ -364,6 +399,7 @@ export async function createWalkinPass(
         currency:      pkg.currency,
         status:        'pending',
         notes:         'Walk-in day pass',
+        ...(branchId ? { branch_id: branchId } : {}),
       } as never)
       .select()
       .single()
@@ -380,6 +416,7 @@ export async function createWalkinPass(
       membership_id:  membership.id,
       method:         'staff',
       checked_in_at:  new Date().toISOString(),
+      ...(branchId ? { branch_id: branchId } : {}),
     } as never)
 
     revalidatePath('/staff/checkin')

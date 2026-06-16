@@ -14,6 +14,7 @@ export const registerMemberSchema = z.object({
   paymentNotes: z.string().optional(),
   amountPaid: z.number().positive('Amount must be positive').optional(),
   sendWelcomeEmail: z.boolean().default(true),
+  homeBranchId: z.string().uuid('Invalid branch ID').optional(),
 })
 
 export type RegisterMemberInput = z.infer<typeof registerMemberSchema>

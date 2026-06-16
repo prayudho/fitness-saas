@@ -24,13 +24,15 @@ import { MemberForm } from '@/components/members/member-form'
 import { getMemberColumns, type MemberRow } from '@/components/members/member-columns'
 import { FreezeDialog } from '@/components/members/freeze-dialog'
 import { useMembers, useUnfreezeMembership, useCancelMembership } from '@/lib/hooks/use-members'
+import { useBranchList } from '@/lib/hooks/use-branches'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useDebounce } from '@/lib/hooks/use-debounce'
 import { Users, UserPlus } from 'lucide-react'
 
 export default function MembersPage() {
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('all')
+  const [search, setSearch]   = useState('')
+  const [status, setStatus]   = useState('all')
+  const [branchId, setBranchId] = useState('all')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [selectedMember, setSelectedMember] = useState<MemberRow | null>(null)
   const [freezeDialogMembershipId, setFreezeDialogMembershipId] = useState<string | null>(null)
@@ -40,10 +42,12 @@ export default function MembersPage() {
   const debouncedSearch = useDebounce(search, 300)
   const unfreeze = useUnfreezeMembership()
   const cancel = useCancelMembership()
+  const { data: branchData } = useBranchList()
 
   const { data: membersData, isLoading } = useMembers({
-    search: debouncedSearch || undefined,
-    status: status !== 'all' ? status : undefined,
+    search:   debouncedSearch || undefined,
+    status:   status   !== 'all' ? status   : undefined,
+    branchId: branchId !== 'all' ? branchId : undefined,
     page: 1,
   })
 
@@ -138,6 +142,23 @@ export default function MembersPage() {
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Branch filter — only visible when brand has multiple branches */}
+        {branchData?.isMultiBranch && (branchData.data?.length ?? 0) > 0 && (
+          <Select value={branchId} onValueChange={setBranchId}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="All Branches" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Branches</SelectItem>
+              {(branchData.data ?? []).map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <DataTable

@@ -17,6 +17,15 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { MoreHorizontal, UserPlus, Eye, Pencil } from 'lucide-react'
 import { useTrainers } from '@/lib/hooks/use-trainers'
+import { useBranchList } from '@/lib/hooks/use-branches'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { useState } from 'react'
 import type { TrainerWithProfile } from '@/lib/actions/trainers'
 import { formatCurrency } from '@/lib/utils'
 
@@ -161,7 +170,11 @@ const columns: ColumnDef<TrainerWithProfile>[] = [
 ]
 
 export default function TrainersPage() {
-  const { data: trainers, isLoading } = useTrainers()
+  const [branchId, setBranchId] = useState('all')
+  const { data: branchData } = useBranchList()
+  const { data: trainers, isLoading } = useTrainers({
+    branchId: branchId !== 'all' ? branchId : undefined,
+  })
 
   return (
     <div className="space-y-6">
@@ -169,12 +182,27 @@ export default function TrainersPage() {
         title="Trainers"
         description="Manage your personal trainers"
         action={
-          <Button asChild>
-            <Link href="/admin/trainers/new">
-              <UserPlus className="mr-2 h-4 w-4" />
-              Add Trainer
-            </Link>
-          </Button>
+          <div className="flex gap-2 items-center flex-wrap">
+            {branchData?.isMultiBranch && (branchData.data?.length ?? 0) > 0 && (
+              <Select value={branchId} onValueChange={setBranchId}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="All Branches" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Branches</SelectItem>
+                  {(branchData.data ?? []).map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button asChild>
+              <Link href="/admin/trainers/new">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add Trainer
+              </Link>
+            </Button>
+          </div>
         }
       />
 

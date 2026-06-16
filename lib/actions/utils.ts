@@ -41,3 +41,42 @@ export async function getAuthedProfile(
 export function getServerBrandId(): string | null {
   return cookies().get('__fp_brand_id')?.value ?? null
 }
+
+/**
+ * Returns the branch_id that should be used as the context for the current user.
+ * - branch_manager: reads profiles.branch_id
+ * - staff: reads staff_branches WHERE is_primary = true
+ * - all others: null
+ */
+export async function getBranchContext(
+  supabase: ReturnType<typeof createClient>
+): Promise<{ branchId: string | null }> {
+  try {
+    const { profile } = await getAuthedProfile(supabase)
+    const role = profile.role as string
+
+    if (role === 'branch_manager') {
+      const { data } = await supabase
+        .from('profiles')
+        .select('branch_id' as never)
+        .eq('id', profile.id)
+        .single()
+      const branchId = data ? (data as unknown as { branch_id: string | null }).branch_id : null
+      return { branchId }
+    }
+
+    if (role === 'staff' || role === 'admin') {
+      const { data } = await (supabase.from('staff_branches' as never) as ReturnType<typeof supabase.from>)
+        .select('branch_id')
+        .eq('profile_id', profile.id)
+        .eq('is_primary', true)
+        .maybeSingle()
+      const branchId = data ? (data as unknown as { branch_id: string }).branch_id : null
+      return { branchId }
+    }
+
+    return { branchId: null }
+  } catch {
+    return { branchId: null }
+  }
+}

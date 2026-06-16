@@ -32,6 +32,8 @@ import {
 } from '@/lib/actions/pt-assignment.actions'
 import type { CommissionListItem } from '@/lib/actions/pt-assignment.actions'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { useBranchList } from '@/lib/hooks/use-branches'
+import { GitBranch } from 'lucide-react'
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -48,6 +50,10 @@ export default function CommissionsPage() {
   const [editingPayout, setEditingPayout]     = useState<CommissionListItem | null>(null)
   const [newSalesPersonId, setNewSalesPersonId] = useState('')
   const [salesPeople, setSalesPeople] = useState<{ id: string; name: string }[]>([])
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('')
+
+  const { data: branchData } = useBranchList()
+  const isMultiBranch = branchData?.isMultiBranch ?? false
 
   // ── Fetch eligible sales people (staff / trainer / admin) ──────────────────
   useEffect(() => {
@@ -76,14 +82,16 @@ export default function CommissionsPage() {
   }, [])
 
   // ── Queries ────────────────────────────────────────────────────────────────
+  const branchFilter = selectedBranchId || undefined
+
   const {
     data: sessionCommissions = [],
     isLoading: sessionLoading,
     refetch: refetchSessions,
   } = useQuery({
-    queryKey: ['commissions', 'session'],
+    queryKey: ['commissions', 'session', branchFilter],
     queryFn: async () => {
-      const result = await listCommissions({ type: 'session' })
+      const result = await listCommissions({ type: 'session', branchId: branchFilter })
       if (result.error) throw new Error(result.error)
       return result.data ?? []
     },
@@ -94,9 +102,9 @@ export default function CommissionsPage() {
     isLoading: salesLoading,
     refetch: refetchSales,
   } = useQuery({
-    queryKey: ['commissions', 'sales'],
+    queryKey: ['commissions', 'sales', branchFilter],
     queryFn: async () => {
-      const result = await listCommissions({ type: 'sales' })
+      const result = await listCommissions({ type: 'sales', branchId: branchFilter })
       if (result.error) throw new Error(result.error)
       return result.data ?? []
     },
@@ -276,6 +284,24 @@ export default function CommissionsPage() {
         title="Commissions"
         description="Review and approve trainer and staff commissions."
       />
+
+      {isMultiBranch && (branchData?.data?.length ?? 0) > 0 && (
+        <div className="flex items-center gap-3">
+          <GitBranch className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm font-medium shrink-0">Branch</span>
+          <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
+            <SelectTrigger className="max-w-[200px]">
+              <SelectValue placeholder="All branches" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All branches</SelectItem>
+              {(branchData?.data ?? []).map((b) => (
+                <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <Tabs defaultValue="session">
         <TabsList>

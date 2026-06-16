@@ -173,6 +173,7 @@ export async function deleteClassType(id: string): Promise<{ error?: string }> {
 export async function getClasses(filters?: {
   weekStart?: string
   classTypeId?: string
+  branchId?: string
 }): Promise<{ data: ClassWithDetails[]; error?: string }> {
   try {
     const supabase = createClient()
@@ -211,6 +212,10 @@ export async function getClasses(filters?: {
 
     if (filters?.classTypeId) {
       query = query.eq('class_type_id', filters.classTypeId)
+    }
+
+    if (filters?.branchId) {
+      query = query.eq('branch_id' as never, filters.branchId)
     }
 
     const { data: rawData, error } = await query

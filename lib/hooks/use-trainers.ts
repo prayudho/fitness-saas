@@ -18,11 +18,11 @@ import {
   getTrainerClasses,
 } from '@/lib/actions/trainers'
 
-export function useTrainers() {
+export function useTrainers(filters?: { branchId?: string }) {
   return useQuery({
-    queryKey: ['trainers'],
+    queryKey: ['trainers', filters],
     queryFn: async () => {
-      const result = await getTrainers()
+      const result = await getTrainers(filters)
       if (result.error) throw new Error(result.error)
       return result.data
     },

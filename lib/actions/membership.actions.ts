@@ -117,7 +117,7 @@ export async function activateMembership(
       pt_sessions_expires_at: ptSessionsExpiresAt,
       pt_sessions_remaining: ptSessionsRemaining,
       gym_access_status:     'active',
-      pt_sessions_status:    category === 'gym_access' ? 'active' : 'active',
+      pt_sessions_status:    'active',
     })
     .select('id')
     .single()
@@ -436,11 +436,13 @@ export async function registerMemberByAdmin(input: RegisterMemberInput): Promise
     }),
   }
 
+  const homeBranchPatch = validated.homeBranchId ? { home_branch_id: validated.homeBranchId } : {}
+
   if (existingAuthUserId) {
     // Existing user: INSERT a new profile row for this brand
     const { error: profileError } = await supabase
       .from('profiles')
-      .insert({ id: authUserId, ...profileFields } as Database['public']['Tables']['profiles']['Insert'])
+      .insert({ id: authUserId, ...profileFields, ...homeBranchPatch } as never)
 
     if (profileError) {
       return { data: null, error: profileError.message }
@@ -449,7 +451,7 @@ export async function registerMemberByAdmin(input: RegisterMemberInput): Promise
     // New user: trigger created a profile with brand_id from app_metadata; UPDATE extras
     const { error: profileError } = await supabase
       .from('profiles')
-      .update(profileFields as Database['public']['Tables']['profiles']['Update'])
+      .update({ ...profileFields, ...homeBranchPatch } as never)
       .eq('id', authUserId)
       .eq('brand_id', validated.brandId)
 

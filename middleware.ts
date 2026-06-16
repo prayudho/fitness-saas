@@ -131,7 +131,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // 7. Protected paths
-  const protectedPaths = ['/admin', '/staff', '/trainer', '/member', '/superadmin']
+  const protectedPaths = ['/admin', '/staff', '/trainer', '/member', '/superadmin', '/branch-manager']
   const isProtected    = protectedPaths.some((p) => pathname.startsWith(p))
 
   if (isProtected && !user) {
@@ -179,13 +179,24 @@ export async function middleware(request: NextRequest) {
       }
     }
 
+    if (brandRole === 'branch_manager') {
+      if (
+        pathname.startsWith('/admin') ||
+        pathname.startsWith('/staff') ||
+        pathname.startsWith('/superadmin')
+      ) {
+        return NextResponse.redirect(new URL('/branch-manager', request.url))
+      }
+    }
+
     // Redirect away from /login and /register when already authenticated
     if (pathname === '/login' || pathname === '/register') {
       let dest = '/member'
-      if (brandRole === 'superadmin') dest = '/superadmin/dashboard'
-      else if (brandRole === 'admin')  dest = '/admin/dashboard'
-      else if (brandRole === 'staff')  dest = '/staff/checkin'
-      else if (brandRole === 'trainer') dest = '/trainer/schedule'
+      if (brandRole === 'superadmin')      dest = '/superadmin/dashboard'
+      else if (brandRole === 'admin')       dest = '/admin/dashboard'
+      else if (brandRole === 'staff')       dest = '/staff/checkin'
+      else if (brandRole === 'trainer')     dest = '/trainer/schedule'
+      else if (brandRole === 'branch_manager') dest = '/branch-manager'
       return NextResponse.redirect(new URL(dest, request.url))
     }
   }

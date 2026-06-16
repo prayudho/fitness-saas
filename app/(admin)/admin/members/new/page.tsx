@@ -44,6 +44,8 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Database } from '@/types/database'
+import { useBranchList } from '@/lib/hooks/use-branches'
+import type { BranchRow } from '@/lib/actions/branches.actions'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -61,6 +63,7 @@ const step1Schema = z.object({
   gender: z.enum(['male', 'female', 'other']).optional(),
   emergencyContactName: z.string().optional(),
   emergencyContactPhone: z.string().optional(),
+  homeBranchId: z.string().optional(),
 })
 
 const step2ActivateSchema = z.object({
@@ -206,9 +209,13 @@ function useBrandId() {
 function Step1Form({
   defaultValues,
   onNext,
+  isMultiBranch = false,
+  branches = [],
 }: {
   defaultValues: Partial<Step1Values>
   onNext: (data: Step1Values) => void
+  isMultiBranch?: boolean
+  branches?: BranchRow[]
 }) {
   const [showEmergency, setShowEmergency] = useState(
     !!(defaultValues.emergencyContactName || defaultValues.emergencyContactPhone)
@@ -224,6 +231,7 @@ function Step1Form({
       gender: defaultValues.gender,
       emergencyContactName: defaultValues.emergencyContactName ?? '',
       emergencyContactPhone: defaultValues.emergencyContactPhone ?? '',
+      homeBranchId: defaultValues.homeBranchId ?? '',
     },
   })
 
@@ -366,6 +374,31 @@ function Step1Form({
             </div>
           )}
         </div>
+
+        {isMultiBranch && branches.length > 0 && (
+          <FormField
+            control={form.control}
+            name="homeBranchId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Home Branch</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="No specific branch (can check in anywhere)" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {branches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <div className="flex justify-end">
           <Button type="submit">
@@ -830,6 +863,7 @@ export default function NewMemberPage() {
 
   const { data: brandId } = useBrandId()
   const { data: packages = [] } = useActivePackages()
+  const { data: branchData } = useBranchList()
 
   const totalSteps = flow === 'register-only' ? 2 : 3
 
@@ -863,6 +897,7 @@ export default function NewMemberPage() {
         gender: step1Data.gender,
         emergencyContactName: step1Data.emergencyContactName || undefined,
         emergencyContactPhone: step1Data.emergencyContactPhone || undefined,
+        homeBranchId: step1Data.homeBranchId || undefined,
         sendWelcomeEmail: true,
       })
 
@@ -897,6 +932,7 @@ export default function NewMemberPage() {
         gender: step1Data.gender,
         emergencyContactName: step1Data.emergencyContactName || undefined,
         emergencyContactPhone: step1Data.emergencyContactPhone || undefined,
+        homeBranchId: step1Data.homeBranchId || undefined,
         packageId: step2Data.packageId,
         paymentMethod: step2Data.paymentMethod,
         paymentNotes: step2Data.paymentNotes || undefined,
@@ -980,6 +1016,8 @@ export default function NewMemberPage() {
         <Step1Form
           defaultValues={step1Data ?? {}}
           onNext={handleStep1Next}
+          isMultiBranch={branchData?.isMultiBranch ?? false}
+          branches={branchData?.data ?? []}
         />
       )}
 

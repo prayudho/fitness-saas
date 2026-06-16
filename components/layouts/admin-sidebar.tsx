@@ -19,25 +19,28 @@ import {
   LogOut,
   Dumbbell,
   Coins,
+  Building2,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { signOut } from '@/lib/actions/auth'
 import { useMobileNav } from '@/lib/stores/mobile-nav-store'
 
-const NAV_ITEMS = [
-  { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/admin/members', label: 'Members', icon: Users },
-  { href: '/admin/packages', label: 'Packages', icon: Package },
-  { href: '/admin/classes', label: 'Classes', icon: CalendarDays },
-  { href: '/admin/trainers', label: 'Trainers', icon: UserCheck },
+const BASE_NAV_ITEMS = [
+  { href: '/admin/dashboard', label: 'Dashboard',    icon: LayoutDashboard },
+  { href: '/admin/members',   label: 'Members',      icon: Users },
+  { href: '/admin/packages',  label: 'Packages',     icon: Package },
+  { href: '/admin/classes',   label: 'Classes',      icon: CalendarDays },
+  { href: '/admin/trainers',  label: 'Trainers',     icon: UserCheck },
   { href: '/admin/commissions', label: 'Commissions', icon: Coins },
-  { href: '/admin/team', label: 'Team', icon: UsersRound },
-  { href: '/admin/billing', label: 'Billing', icon: CreditCard },
-  { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
-  { href: '/admin/settings', label: 'Settings', icon: Settings },
-  { href: '/admin/account', label: 'My Account', icon: KeyRound },
+  { href: '/admin/team',      label: 'Team',         icon: UsersRound },
+  { href: '/admin/billing',   label: 'Billing',      icon: CreditCard },
+  { href: '/admin/reports',   label: 'Reports',      icon: BarChart3 },
+  { href: '/admin/settings',  label: 'Settings',     icon: Settings },
+  { href: '/admin/account',   label: 'My Account',   icon: KeyRound },
 ]
+
+const BRANCH_NAV_ITEM = { href: '/admin/branches', label: 'Branches', icon: Building2 }
 
 const STORAGE_KEY = 'admin-sidebar-collapsed'
 
@@ -45,9 +48,10 @@ interface AdminSidebarProps {
   userName?: string
   userEmail?: string
   userRole?: string
+  isMultiBranch?: boolean
 }
 
-export function AdminSidebar({ userName, userEmail, userRole }: AdminSidebarProps) {
+export function AdminSidebar({ userName, userEmail, userRole, isMultiBranch }: AdminSidebarProps) {
   const pathname = usePathname()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -79,6 +83,15 @@ export function AdminSidebar({ userName, userEmail, userRole }: AdminSidebarProp
 
   // Prevent hydration mismatch — render expanded on server
   const collapsed = mounted ? isCollapsed : false
+
+  // Insert Branches item after Members when is_multi_branch is enabled
+  const NAV_ITEMS = isMultiBranch
+    ? [
+        ...BASE_NAV_ITEMS.slice(0, 2),
+        BRANCH_NAV_ITEM,
+        ...BASE_NAV_ITEMS.slice(2),
+      ]
+    : BASE_NAV_ITEMS
 
   return (
     <>
@@ -133,7 +146,7 @@ export function AdminSidebar({ userName, userEmail, userRole }: AdminSidebarProp
               key={href}
               href={href}
               className={`
-                flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium
+                flex items-center gap-3 rounded-md px-2 py-2 min-h-[44px] text-sm font-medium
                 transition-colors
                 ${
                   isActive
@@ -213,7 +226,7 @@ export function AdminSidebar({ userName, userEmail, userRole }: AdminSidebarProp
                 href={href}
                 onClick={close}
                 className={`
-                  flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium
+                  flex items-center gap-3 rounded-md px-2 py-2 min-h-[44px] text-sm font-medium
                   transition-colors
                   ${isActive
                     ? 'bg-primary text-primary-foreground'

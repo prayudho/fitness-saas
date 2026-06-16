@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useCallback, useRef } from 'react'
-import { QrCode, Search, Clock, Smartphone } from 'lucide-react'
+import { QrCode, Search, Clock, Smartphone, GitBranch } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { QRScanner } from '@/components/checkin/qr-scanner'
@@ -12,20 +14,26 @@ import type { CheckinResultData } from '@/components/checkin/checkin-result'
 import { MemberSearch } from '@/components/checkin/member-search'
 import { OccupancyCounter } from '@/components/checkin/occupancy-counter'
 import { useProcessCheckin, useCheckinLog, useRecordCheckinWithOverride } from '@/lib/hooks/use-checkins'
+import { useBranchList } from '@/lib/hooks/use-branches'
 import { formatRelativeTime } from '@/lib/utils'
 
 export default function CheckinPage() {
   const [checkinResult, setCheckinResult] = useState<CheckinResultData | null>(null)
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('')
   const lastInputRef = useRef<{ member_id: string; membership_id?: string; method: 'qr' | 'staff' | 'gate' }>()
 
   const processCheckin = useProcessCheckin()
   const recordOverride = useRecordCheckinWithOverride()
   const { data: recentCheckins } = useCheckinLog(10)
+  const { data: branchData } = useBranchList()
+
+  const isMultiBranch = branchData?.isMultiBranch ?? false
+  const activeBranchId = selectedBranchId || undefined
 
   const handleCheckin = useCallback(
     async (memberId: string, method: 'qr' | 'staff' | 'gate' = 'staff') => {
       lastInputRef.current = { member_id: memberId, method }
-      const result = await processCheckin.mutateAsync({ member_id: memberId, method })
+      const result = await processCheckin.mutateAsync({ member_id: memberId, method, branchId: activeBranchId })
       if (result) {
         if (result.membership?.id) {
           lastInputRef.current.membership_id = result.membership.id
@@ -33,7 +41,7 @@ export default function CheckinPage() {
         setCheckinResult(result as CheckinResultData)
       }
     },
-    [processCheckin]
+    [processCheckin, activeBranchId]
   )
 
   const handleQRScan = useCallback(
@@ -55,9 +63,10 @@ export default function CheckinPage() {
         method:          last.method,
         allowed,
         warning_message: checkinResult?.message ?? null,
+        branchId:        activeBranchId,
       })
     },
-    [checkinResult, recordOverride]
+    [checkinResult, recordOverride, activeBranchId]
   )
 
   function getMethodLabel(method: string) {
@@ -83,6 +92,31 @@ export default function CheckinPage() {
         />
         <OccupancyCounter className="shrink-0" />
       </div>
+
+      {isMultiBranch && (
+        <div className="flex items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3">
+          <GitBranch className="h-4 w-4 text-muted-foreground shrink-0" />
+          <Label className="text-sm font-medium shrink-0">Check-in Branch</Label>
+          <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
+            <SelectTrigger className="max-w-[240px]">
+              <SelectValue placeholder="Auto-detect from profile" />
+            </SelectTrigger>
+            <SelectContent>
+              {(branchData?.data ?? []).map((b) => (
+                <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedBranchId && (
+            <button
+              className="text-xs text-muted-foreground hover:text-foreground underline"
+              onClick={() => setSelectedBranchId('')}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Result overlay */}
       <CheckinResult

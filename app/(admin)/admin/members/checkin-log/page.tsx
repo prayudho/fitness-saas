@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useCheckinLog } from '@/lib/hooks/use-checkins'
+import { useBranchList } from '@/lib/hooks/use-branches'
 import type { CheckinWithProfile } from '@/lib/actions/checkins'
 import { formatDate } from '@/lib/utils'
 
@@ -102,7 +103,11 @@ const columns: ColumnDef<CheckinWithProfile>[] = [
 
 export default function CheckinLogPage() {
   const [dateFilter, setDateFilter] = useState<DateFilter>('today')
-  const { data: checkins, isLoading } = useCheckinLog(200)
+  const [branchId, setBranchId] = useState('all')
+  const { data: branchData } = useBranchList()
+  const { data: checkins, isLoading } = useCheckinLog(200, {
+    branchId: branchId !== 'all' ? branchId : undefined,
+  })
 
   const filteredCheckins = useMemo(() => {
     if (!checkins) return []
@@ -173,6 +178,20 @@ export default function CheckinLogPage() {
                   <SelectItem value="all">All Time</SelectItem>
                 </SelectContent>
               </Select>
+
+              {branchData?.isMultiBranch && (branchData.data?.length ?? 0) > 0 && (
+                <Select value={branchId} onValueChange={setBranchId}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="All Branches" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Branches</SelectItem>
+                    {(branchData.data ?? []).map((b) => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <Button
               variant="outline"

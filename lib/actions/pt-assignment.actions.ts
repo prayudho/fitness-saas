@@ -522,7 +522,7 @@ export type CommissionListItem = {
 }
 
 export async function listCommissions(
-  filters?: { type?: 'session' | 'sales'; status?: string }
+  filters?: { type?: 'session' | 'sales'; status?: string; branchId?: string }
 ): Promise<{ data: CommissionListItem[]; error?: string }> {
   try {
     const supabase = createClient()
@@ -536,8 +536,9 @@ export async function listCommissions(
       .eq('brand_id', profile.brand_id)
       .order('created_at', { ascending: false })
 
-    if (filters?.type)   query = query.eq('payout_type', filters.type)
-    if (filters?.status) query = query.eq('status', filters.status)
+    if (filters?.type)     query = query.eq('payout_type', filters.type)
+    if (filters?.status)   query = query.eq('status', filters.status)
+    if (filters?.branchId) query = query.eq('branch_id', filters.branchId)
 
     const { data: payouts, error } = await query
     if (error) throw error

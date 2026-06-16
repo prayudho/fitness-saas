@@ -12,13 +12,21 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { formatDate } from '@/lib/utils'
 import { useClasses, useMemberBookings } from '@/lib/hooks/use-classes'
+import { useBranchList } from '@/lib/hooks/use-branches'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { MemberBookingWithClass } from '@/lib/actions/classes'
-import { Clock, MapPin } from 'lucide-react'
+import { Clock, MapPin, GitBranch } from 'lucide-react'
 
 function getMonday(date: Date): Date {
   const d = new Date(date)
@@ -122,9 +130,14 @@ export default function MemberClassesPage() {
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()))
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('')
+
+  const { data: branchData } = useBranchList()
+  const isMultiBranch = branchData?.isMultiBranch ?? false
 
   const { data: classes = [], isLoading: loadingClasses } = useClasses({
     weekStart: weekStart.toISOString(),
+    branchId: selectedBranchId || undefined,
   })
   const { data: bookings = [], isLoading: loadingBookings } = useMemberBookings()
 
@@ -149,6 +162,24 @@ export default function MemberClassesPage() {
         title="Class Schedule"
         description="Browse and book upcoming group classes"
       />
+
+      {isMultiBranch && (branchData?.data?.length ?? 0) > 0 && (
+        <div className="flex items-center gap-3">
+          <GitBranch className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm font-medium shrink-0">Branch</span>
+          <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
+            <SelectTrigger className="max-w-[200px]">
+              <SelectValue placeholder="All branches" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All branches</SelectItem>
+              {(branchData?.data ?? []).map((b) => (
+                <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <Tabs defaultValue="schedule">
         <TabsList>

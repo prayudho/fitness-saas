@@ -35,7 +35,9 @@ export type TrainerDetail = TrainerRow & {
   sessions: TrainerSessionWithMember[]
 }
 
-export async function getTrainers(): Promise<{ data: TrainerWithProfile[]; error?: string }> {
+export async function getTrainers(
+  filters?: { branchId?: string }
+): Promise<{ data: TrainerWithProfile[]; error?: string }> {
   try {
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
@@ -45,7 +47,7 @@ export async function getTrainers(): Promise<{ data: TrainerWithProfile[]; error
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
-    const { data: rawTrainers, error } = await supabase
+    let trainersQuery = supabase
       .from('trainers')
       .select(`
         *,
@@ -54,7 +56,20 @@ export async function getTrainers(): Promise<{ data: TrainerWithProfile[]; error
       .eq('brand_id', brandId)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    // Filter by branch via trainer_branches junction table
+    if (filters?.branchId) {
+      const { data: tbRows } = await supabase
+        .from('trainer_branches' as never)
+        .select('trainer_id')
+        .eq('branch_id' as never, filters.branchId)
+      const trainerIds = ((tbRows ?? []) as { trainer_id: string }[]).map((r) => r.trainer_id)
+      if (trainerIds.length === 0) return { data: [], error: undefined }
+      trainersQuery = trainersQuery.in('id', trainerIds)
+    }
+
+    const { data: rawTrainers, error } = await trainersQuery
+
+    if (error) return { data: [], error: error.message }
     const trainers = (rawTrainers ?? []) as unknown as Array<TrainerRow & { profiles: Pick<ProfileRow, 'id' | 'full_name' | 'avatar_url' | 'phone'> | null }>
 
     const [sessionCountsRes, activeMembersRes, pendingPayoutsRes] = await Promise.all([
@@ -358,6 +373,7 @@ export async function createSession(input: {
         trainer_id: input.trainer_id,
         member_id: input.member_id,
         pt_assignment_id: ptAssignment?.id ?? null,
+        membership_id: ptAssignment?.membership_id ?? null,
         scheduled_at: input.scheduled_at,
         duration_minutes: input.duration_minutes ?? 60,
         session_fee: input.session_fee ?? null,
@@ -428,6 +444,11 @@ export async function updateSessionStatus(
 
     if (fetchError || !existing) throw fetchError ?? new Error('Session not found')
 
+    // Idempotency: if already in the requested status, return early with no side effects.
+    if (existing.status === status) return { data: existing as unknown as TrainerSessionRow }
+    // Guard: completed is a terminal state — no further status changes allowed.
+    if (existing.status === 'completed') return { error: 'Session is already completed and cannot be changed.' }
+
     let commission_earned: number | null = null
     if (status === 'completed') {
       const trainer = existing.trainers as { commission_model?: string; commission_value?: number } | null
@@ -473,15 +494,24 @@ export async function updateSessionStatus(
           const amount = pkgCommission ?? commission_earned
 
           if (amount && amount > 0) {
-            await supabase.from('pt_commission_payouts').insert({
-              brand_id:           brandId,
-              trainer_id:         existing.trainer_id,
-              payout_type:        'session',
-              pt_assignment_id:   assignmentId,
-              trainer_session_id: id,
-              amount,
-              status:             'pending',
-            } as never)
+            // Idempotency: skip insert if a session payout already exists for this session.
+            const { count: existingPayout } = await supabase
+              .from('pt_commission_payouts')
+              .select('id', { count: 'exact', head: true })
+              .eq('trainer_session_id', id)
+              .eq('payout_type', 'session')
+
+            if (!existingPayout || existingPayout === 0) {
+              await supabase.from('pt_commission_payouts').insert({
+                brand_id:           brandId,
+                trainer_id:         existing.trainer_id,
+                payout_type:        'session',
+                pt_assignment_id:   assignmentId,
+                trainer_session_id: id,
+                amount,
+                status:             'pending',
+              } as never)
+            }
 
             await supabase
               .from('trainer_sessions')
@@ -1003,6 +1033,7 @@ export async function bookSessionByTrainer(input: {
         trainer_id:       trainerId,
         member_id:        input.member_id,
         pt_assignment_id: assignment.id,
+        membership_id:    membership.id,
         scheduled_at:     input.scheduled_at,
         duration_minutes: input.duration_minutes ?? 60,
         notes:            input.notes ?? null,
@@ -1104,15 +1135,16 @@ export async function bookMemberPTSession(input: {
     const { data: rawSession, error: insertErr } = await serviceClient
       .from('trainer_sessions')
       .insert({
-        brand_id: brandId,
-        trainer_id: assignment.trainer_id,
-        member_id: profile.id,
+        brand_id:         brandId,
+        trainer_id:       assignment.trainer_id,
+        member_id:        profile.id,
         pt_assignment_id: assignment.id,
-        scheduled_at: input.scheduled_at,
+        membership_id:    membership.id,
+        scheduled_at:     input.scheduled_at,
         duration_minutes: input.duration_minutes ?? 60,
-        notes: input.notes ?? null,
-        status: 'scheduled',
-        session_fee: null,
+        notes:            input.notes ?? null,
+        status:           'scheduled',
+        session_fee:      null,
       } as never)
       .select('id')
       .single()

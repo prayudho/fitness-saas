@@ -10,11 +10,14 @@ import {
   getOccupancyCount,
 } from '@/lib/actions/checkins'
 
-export function useCheckinLog(limit = 50) {
+export function useCheckinLog(
+  limit = 50,
+  filters?: { dateFilter?: 'today' | 'week' | 'all'; branchId?: string }
+) {
   return useQuery({
-    queryKey: ['checkin-log', limit],
+    queryKey: ['checkin-log', limit, filters],
     queryFn: async () => {
-      const result = await getCheckinLog(limit)
+      const result = await getCheckinLog(limit, filters)
       if (result.error) throw new Error(result.error)
       return result.data
     },
@@ -25,7 +28,7 @@ export function useCheckinLog(limit = 50) {
 export function useProcessCheckin() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (input: { member_id: string; method: 'qr' | 'staff' | 'gate' }) => {
+    mutationFn: async (input: { member_id: string; method: 'qr' | 'staff' | 'gate'; branchId?: string }) => {
       return processCheckin(input)
     },
     onSuccess: (result) => {
@@ -48,6 +51,7 @@ export function useRecordCheckinWithOverride() {
       method: 'qr' | 'staff' | 'gate'
       allowed: boolean
       warning_message: string | null
+      branchId?: string
     }) => {
       const result = await recordCheckinWithOverride(input)
       if (result.error) throw new Error(result.error)

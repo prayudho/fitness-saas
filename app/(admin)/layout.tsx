@@ -39,12 +39,18 @@ export default async function AdminLayout({
   }
 
   // Fetch brand settings for theme + display
-  type BrandTheme = { name: string; logo_url: string | null; primary_color: string | null; secondary_color: string | null }
+  type BrandTheme = {
+    name: string
+    logo_url: string | null
+    primary_color: string | null
+    secondary_color: string | null
+    is_multi_branch: boolean
+  }
   let brand: BrandTheme | null = null
   if (brandId) {
     const brandResult = await supabase
       .from('brands')
-      .select('name, logo_url, primary_color, secondary_color')
+      .select('name, logo_url, primary_color, secondary_color, is_multi_branch')
       .eq('id', brandId)
       .maybeSingle()
     brand = (brandResult.data as unknown) as BrandTheme | null
@@ -60,6 +66,7 @@ export default async function AdminLayout({
           userName={user.user_metadata?.full_name}
           userEmail={user.email}
           userRole={role}
+          isMultiBranch={brand?.is_multi_branch ?? false}
         />
         <div className="flex-1 flex flex-col overflow-hidden">
           <TopBar

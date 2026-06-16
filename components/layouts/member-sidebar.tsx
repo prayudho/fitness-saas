@@ -128,7 +128,7 @@ export function MemberSidebar({ userName, userEmail, avatarUrl }: MemberSidebarP
               key={href}
               href={href}
               className={`
-                flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium
+                flex items-center gap-3 rounded-md px-2 py-2 min-h-[44px] text-sm font-medium
                 transition-colors
                 ${
                   isActive
@@ -209,7 +209,7 @@ export function MemberSidebar({ userName, userEmail, avatarUrl }: MemberSidebarP
                 href={href}
                 onClick={close}
                 className={`
-                  flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium
+                  flex items-center gap-3 rounded-md px-2 py-2 min-h-[44px] text-sm font-medium
                   transition-colors
                   ${isActive
                     ? 'bg-primary text-primary-foreground'

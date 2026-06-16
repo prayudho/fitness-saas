@@ -39,6 +39,7 @@ export type MemberDetail = ProfileRow & {
 export async function getMembers(filters?: {
   search?: string
   status?: string
+  branchId?: string
   page?: number
   limit?: number
 }): Promise<{ data: ProfileWithMembership[]; count: number; error?: string }> {
@@ -66,6 +67,10 @@ export async function getMembers(filters?: {
       query = query.or(
         `full_name.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`
       )
+    }
+
+    if (filters?.branchId) {
+      query = query.eq('home_branch_id' as never, filters.branchId)
     }
 
     const { data, error, count } = await query
@@ -450,6 +455,30 @@ export async function assignPackage(input: {
     revalidatePath(`/admin/members/${input.member_id}`)
 
     return { data: { membership, invoice } }
+  } catch (e) {
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
+  }
+}
+
+export async function updateMemberHomeBranch(
+  memberId: string,
+  branchId: string | null
+): Promise<{ error: string | null }> {
+  try {
+    const supabase = createClient()
+    const { profile } = await getAuthedProfile(supabase)
+    if (!profile.brand_id) return { error: 'No brand context' }
+    if (profile.role !== 'admin') return { error: 'Unauthorized' }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ home_branch_id: branchId } as never)
+      .eq('id', memberId)
+      .eq('brand_id', profile.brand_id)
+
+    if (error) return { error: error.message }
+    revalidatePath(`/admin/members/${memberId}`)
+    return { error: null }
   } catch (e) {
     return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
   }

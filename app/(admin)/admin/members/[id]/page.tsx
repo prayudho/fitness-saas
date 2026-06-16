@@ -14,6 +14,7 @@ import { ResetPasswordDialog } from '@/components/members/reset-password-dialog'
 import { PTAssignmentCard } from '@/components/pt-assignment/pt-assignment-card'
 import { MemberInvoicesTab } from '@/components/members/member-invoices-tab'
 import { MemberWorkoutHistory } from '@/components/members/member-workout-history'
+import { BranchAccessSection } from '@/components/members/branch-access-section'
 
 interface PageProps {
   params: { id: string }
@@ -340,6 +341,11 @@ export default async function MemberDetailPage({ params }: PageProps) {
               </div>
             </CardContent>
           </Card>
+
+          <BranchAccessSection
+            memberId={params.id}
+            currentHomeBranchId={(member as typeof member & { home_branch_id?: string | null }).home_branch_id ?? null}
+          />
         </div>
       </div>
     </div>
