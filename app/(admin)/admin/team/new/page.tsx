@@ -108,6 +108,11 @@ export default function NewTeamMemberPage() {
         </p>
       </div>
 
+      {/* DEBUG: remove after fix */}
+      <pre className="text-xs bg-yellow-50 p-2 rounded border border-yellow-200 overflow-auto max-h-24">
+        isMultiBranch={String(isMultiBranch)} | branchData={JSON.stringify(branchData)}
+      </pre>
+
       <Card>
         <CardHeader>
           <CardTitle>Member Details</CardTitle>
