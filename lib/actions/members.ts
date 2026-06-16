@@ -468,7 +468,7 @@ export async function updateMemberHomeBranch(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
-    if (profile.role !== 'admin') return { error: 'Unauthorized' }
+    if (profile.role !== 'admin' && profile.role !== 'branch_manager') return { error: 'Unauthorized' }
 
     const { error } = await supabase
       .from('profiles')

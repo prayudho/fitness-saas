@@ -12,6 +12,7 @@ import {
   BarChart3,
   KeyRound,
   Building2,
+  UsersRound,
   Menu,
   X,
   ChevronLeft,
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { href: '/branch-manager/classes',   label: 'Classes',    icon: CalendarDays },
   { href: '/branch-manager/checkins',  label: 'Check-ins',  icon: ScanLine },
   { href: '/branch-manager/trainers',  label: 'Trainers',   icon: UserCheck },
+  { href: '/branch-manager/team',      label: 'Team',       icon: UsersRound },
   { href: '/branch-manager/reports',   label: 'Reports',    icon: BarChart3 },
   { href: '/branch-manager/account',   label: 'My Account', icon: KeyRound },
 ]

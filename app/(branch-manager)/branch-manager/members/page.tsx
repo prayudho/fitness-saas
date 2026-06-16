@@ -1,10 +1,13 @@
 'use client'
 
+import Link from 'next/link'
 import type { ColumnDef } from '@tanstack/react-table'
+import { UserPlus } from 'lucide-react'
 import { PageHeader } from '@/components/shared/page-header'
 import { DataTable } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
 import { useMembers } from '@/lib/hooks/use-members'
 import type { ProfileWithMembership } from '@/lib/actions/members'
 
@@ -58,6 +61,14 @@ export default function BranchManagerMembersPage() {
       <PageHeader
         title="Members"
         description="Members at your branch"
+        action={
+          <Button asChild>
+            <Link href="/branch-manager/members/new">
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add Member
+            </Link>
+          </Button>
+        }
       />
       <DataTable
         data={(membersData?.data ?? []) as ProfileWithMembership[]}

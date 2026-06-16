@@ -41,7 +41,7 @@ export default function BranchManagerClassesPage() {
           weekStart={weekStart}
           onClassClick={(id) => { setSelectedClassId(id); setIsDetailOpen(true) }}
           onWeekChange={setWeekStart}
-          isAdmin={false}
+          isAdmin={true}
         />
       )}
 
@@ -49,7 +49,7 @@ export default function BranchManagerClassesPage() {
         classId={selectedClassId}
         isOpen={isDetailOpen}
         onClose={() => { setIsDetailOpen(false); setSelectedClassId(null) }}
-        isAdmin={false}
+        isAdmin={true}
       />
     </div>
   )
