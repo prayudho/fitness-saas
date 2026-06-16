@@ -95,7 +95,7 @@ export async function inviteTeamMember(
       return { data: null, error: 'This person already has an account at this gym' }
     }
 
-    const { data: profileData, error: profileError } = await supabase
+    const { error: profileError } = await supabase
       .from('profiles')
       .insert({
         id:                   userId,
@@ -109,11 +109,9 @@ export async function inviteTeamMember(
         is_active:            true,
         phone:                phone ?? null,
       })
-      .select('id')
-      .single()
 
-    if (profileError || !profileData) {
-      return { data: null, error: profileError?.message ?? 'Failed to create profile' }
+    if (profileError) {
+      return { data: null, error: profileError.message }
     }
 
     const { subject, html } = renderTeamInviteEmail({
@@ -127,7 +125,7 @@ export async function inviteTeamMember(
     const { error: emailError } = await sendEmail(email, subject, html)
     if (emailError) console.error('[inviteTeamMember] email send failed:', emailError)
 
-    return { data: { userId, profileId: profileData.id }, error: null }
+    return { data: { userId, profileId: userId }, error: null }
   }
 
   // ── New user: create auth account + let trigger create the profile ───
@@ -150,7 +148,7 @@ export async function inviteTeamMember(
   userId = authData.user.id
 
   // Trigger created the profile with brand_id from app_metadata. Update extras.
-  const { data: profileData, error: profileError } = await supabase
+  const { error: profileError } = await supabase
     .from('profiles')
     .update({
       full_name:            fullName,
@@ -163,12 +161,10 @@ export async function inviteTeamMember(
     })
     .eq('id', userId)
     .eq('brand_id', brandId)
-    .select('id')
-    .single()
 
-  if (profileError || !profileData) {
+  if (profileError) {
     await supabase.auth.admin.deleteUser(userId)
-    return { data: null, error: profileError?.message ?? 'Failed to update profile' }
+    return { data: null, error: profileError.message }
   }
 
   // Send invite email
@@ -188,7 +184,7 @@ export async function inviteTeamMember(
     console.error('[inviteTeamMember] email send failed:', emailError)
   }
 
-  return { data: { userId, profileId: profileData.id }, error: null }
+  return { data: { userId, profileId: userId }, error: null }
 }
 
 // ----------------------------------------------------------------
