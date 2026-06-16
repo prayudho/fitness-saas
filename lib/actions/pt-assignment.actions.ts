@@ -763,7 +763,7 @@ export async function getBrandPayouts(filters?: {
 
     const result = payouts.map((row) => ({
       ...row,
-      trainer_name: nameMap[row.trainer_id] ?? '',
+      trainer_name: row.trainer_id ? (nameMap[row.trainer_id] ?? '') : '',
     })) as (PTCommissionPayoutRow & { trainer_name: string })[]
 
     return { data: result }

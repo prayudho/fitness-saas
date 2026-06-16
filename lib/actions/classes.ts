@@ -238,6 +238,7 @@ export async function getClasses(filters?: {
       return {
         id: cls.id,
         brand_id: cls.brand_id,
+        branch_id: cls.branch_id,
         class_type_id: cls.class_type_id,
         instructor_id: cls.instructor_id,
         room: cls.room,
@@ -306,6 +307,7 @@ export async function getClass(id: string): Promise<{ data?: ClassDetail; error?
     const result: ClassDetail = {
       id: data.id,
       brand_id: data.brand_id,
+      branch_id: data.branch_id,
       class_type_id: data.class_type_id,
       instructor_id: data.instructor_id,
       room: data.room,

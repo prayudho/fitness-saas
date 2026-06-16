@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -14,6 +14,95 @@ export type Database = {
   }
   public: {
     Tables: {
+      branch_targets: {
+        Row: {
+          branch_id: string
+          created_at: string
+          id: string
+          member_target: number | null
+          period: string
+          revenue_target: number | null
+          session_target: number | null
+        }
+        Insert: {
+          branch_id: string
+          created_at?: string
+          id?: string
+          member_target?: number | null
+          period: string
+          revenue_target?: number | null
+          session_target?: number | null
+        }
+        Update: {
+          branch_id?: string
+          created_at?: string
+          id?: string
+          member_target?: number | null
+          period?: string
+          revenue_target?: number | null
+          session_target?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "branch_targets_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "branch_targets_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
+          },
+        ]
+      }
+      branches: {
+        Row: {
+          address: string | null
+          brand_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          phone: string | null
+          timezone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          brand_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          phone?: string | null
+          timezone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          brand_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          phone?: string | null
+          timezone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "branches_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brands: {
         Row: {
           address: string | null
@@ -23,6 +112,7 @@ export type Database = {
           expiry_reminder_days: number[]
           id: string
           is_active: boolean
+          is_multi_branch: boolean
           logo_url: string | null
           name: string
           owner_user_id: string | null
@@ -46,6 +136,7 @@ export type Database = {
           expiry_reminder_days?: number[]
           id?: string
           is_active?: boolean
+          is_multi_branch?: boolean
           logo_url?: string | null
           name: string
           owner_user_id?: string | null
@@ -69,6 +160,7 @@ export type Database = {
           expiry_reminder_days?: number[]
           id?: string
           is_active?: boolean
+          is_multi_branch?: boolean
           logo_url?: string | null
           name?: string
           owner_user_id?: string | null
@@ -88,6 +180,7 @@ export type Database = {
       }
       checkins: {
         Row: {
+          branch_id: string
           brand_id: string
           checked_in_at: string
           id: string
@@ -99,6 +192,7 @@ export type Database = {
           warning_message: string | null
         }
         Insert: {
+          branch_id: string
           brand_id: string
           checked_in_at?: string
           id?: string
@@ -110,6 +204,7 @@ export type Database = {
           warning_message?: string | null
         }
         Update: {
+          branch_id?: string
           brand_id?: string
           checked_in_at?: string
           id?: string
@@ -121,6 +216,20 @@ export type Database = {
           warning_message?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "checkins_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkins_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
+          },
           {
             foreignKeyName: "checkins_brand_id_fkey"
             columns: ["brand_id"]
@@ -268,6 +377,7 @@ export type Database = {
       }
       classes: {
         Row: {
+          branch_id: string
           brand_id: string
           capacity: number
           class_type_id: string
@@ -281,6 +391,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          branch_id: string
           brand_id: string
           capacity?: number
           class_type_id: string
@@ -294,6 +405,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          branch_id?: string
           brand_id?: string
           capacity?: number
           class_type_id?: string
@@ -307,6 +419,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "classes_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "classes_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
+          },
           {
             foreignKeyName: "classes_brand_id_fkey"
             columns: ["brand_id"]
@@ -436,6 +562,7 @@ export type Database = {
       invoices: {
         Row: {
           amount: number
+          branch_id: string | null
           brand_id: string
           created_at: string
           currency: string
@@ -454,6 +581,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          branch_id?: string | null
           brand_id: string
           created_at?: string
           currency?: string
@@ -472,6 +600,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          branch_id?: string | null
           brand_id?: string
           created_at?: string
           currency?: string
@@ -489,6 +618,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "invoices_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
+          },
           {
             foreignKeyName: "invoices_brand_id_fkey"
             columns: ["brand_id"]
@@ -666,6 +809,7 @@ export type Database = {
       membership_packages: {
         Row: {
           allow_freeze: boolean
+          branch_id: string | null
           brand_id: string
           created_at: string
           currency: string
@@ -689,6 +833,7 @@ export type Database = {
         }
         Insert: {
           allow_freeze?: boolean
+          branch_id?: string | null
           brand_id: string
           created_at?: string
           currency?: string
@@ -712,6 +857,7 @@ export type Database = {
         }
         Update: {
           allow_freeze?: boolean
+          branch_id?: string | null
           brand_id?: string
           created_at?: string
           currency?: string
@@ -734,6 +880,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "membership_packages_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "membership_packages_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
+          },
           {
             foreignKeyName: "membership_packages_brand_id_fkey"
             columns: ["brand_id"]
@@ -796,9 +956,97 @@ export type Database = {
           },
         ]
       }
+      membership_scope_changes: {
+        Row: {
+          changed_by: string
+          created_at: string
+          id: string
+          membership_id: string
+          new_branch_id: string | null
+          old_branch_id: string | null
+          reason: string | null
+        }
+        Insert: {
+          changed_by: string
+          created_at?: string
+          id?: string
+          membership_id: string
+          new_branch_id?: string | null
+          old_branch_id?: string | null
+          reason?: string | null
+        }
+        Update: {
+          changed_by?: string
+          created_at?: string
+          id?: string
+          membership_id?: string
+          new_branch_id?: string | null
+          old_branch_id?: string | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "membership_scope_changes_membership_id_fkey"
+            columns: ["membership_id"]
+            isOneToOne: false
+            referencedRelation: "memberships"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "membership_scope_changes_membership_id_fkey"
+            columns: ["membership_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_members"
+            referencedColumns: ["membership_id"]
+          },
+          {
+            foreignKeyName: "membership_scope_changes_membership_id_fkey"
+            columns: ["membership_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_memberships"
+            referencedColumns: ["membership_id"]
+          },
+          {
+            foreignKeyName: "membership_scope_changes_membership_id_fkey"
+            columns: ["membership_id"]
+            isOneToOne: false
+            referencedRelation: "v_expiry_report"
+            referencedColumns: ["membership_id"]
+          },
+          {
+            foreignKeyName: "membership_scope_changes_new_branch_id_fkey"
+            columns: ["new_branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "membership_scope_changes_new_branch_id_fkey"
+            columns: ["new_branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
+          },
+          {
+            foreignKeyName: "membership_scope_changes_old_branch_id_fkey"
+            columns: ["old_branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "membership_scope_changes_old_branch_id_fkey"
+            columns: ["old_branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           auto_renew: boolean
+          branch_id: string | null
           brand_id: string
           created_at: string
           expires_at: string | null
@@ -818,6 +1066,7 @@ export type Database = {
         }
         Insert: {
           auto_renew?: boolean
+          branch_id?: string | null
           brand_id: string
           created_at?: string
           expires_at?: string | null
@@ -837,6 +1086,7 @@ export type Database = {
         }
         Update: {
           auto_renew?: boolean
+          branch_id?: string | null
           brand_id?: string
           created_at?: string
           expires_at?: string | null
@@ -855,6 +1105,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "memberships_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memberships_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
+          },
           {
             foreignKeyName: "memberships_brand_id_fkey"
             columns: ["brand_id"]
@@ -902,6 +1166,7 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          branch_id: string | null
           brand_id: string | null
           created_at: string
           custom_role_id: string | null
@@ -910,6 +1175,7 @@ export type Database = {
           emergency_contact_phone: string | null
           full_name: string
           gender: string | null
+          home_branch_id: string | null
           id: string
           is_active: boolean
           must_change_password: boolean
@@ -920,6 +1186,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          branch_id?: string | null
           brand_id?: string | null
           created_at?: string
           custom_role_id?: string | null
@@ -928,6 +1195,7 @@ export type Database = {
           emergency_contact_phone?: string | null
           full_name: string
           gender?: string | null
+          home_branch_id?: string | null
           id: string
           is_active?: boolean
           must_change_password?: boolean
@@ -938,6 +1206,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          branch_id?: string | null
           brand_id?: string | null
           created_at?: string
           custom_role_id?: string | null
@@ -946,6 +1215,7 @@ export type Database = {
           emergency_contact_phone?: string | null
           full_name?: string
           gender?: string | null
+          home_branch_id?: string | null
           id?: string
           is_active?: boolean
           must_change_password?: boolean
@@ -955,6 +1225,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "profiles_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
+          },
           {
             foreignKeyName: "profiles_brand_id_fkey"
             columns: ["brand_id"]
@@ -968,6 +1252,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "custom_roles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_home_branch_id_fkey"
+            columns: ["home_branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_home_branch_id_fkey"
+            columns: ["home_branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
           },
         ]
       }
@@ -1361,6 +1659,39 @@ export type Database = {
           },
         ]
       }
+      staff_branches: {
+        Row: {
+          branch_id: string
+          is_primary: boolean
+          profile_id: string
+        }
+        Insert: {
+          branch_id: string
+          is_primary?: boolean
+          profile_id: string
+        }
+        Update: {
+          branch_id?: string
+          is_primary?: boolean
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_branches_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_branches_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
+          },
+        ]
+      }
       trainer_availability: {
         Row: {
           day_of_week: number
@@ -1396,8 +1727,49 @@ export type Database = {
           },
         ]
       }
+      trainer_branches: {
+        Row: {
+          branch_id: string
+          is_primary: boolean
+          trainer_id: string
+        }
+        Insert: {
+          branch_id: string
+          is_primary?: boolean
+          trainer_id: string
+        }
+        Update: {
+          branch_id?: string
+          is_primary?: boolean
+          trainer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trainer_branches_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trainer_branches_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
+          },
+          {
+            foreignKeyName: "trainer_branches_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "trainers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trainer_sessions: {
         Row: {
+          branch_id: string | null
           brand_id: string
           commission_approved_at: string | null
           commission_approved_by: string | null
@@ -1418,6 +1790,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          branch_id?: string | null
           brand_id: string
           commission_approved_at?: string | null
           commission_approved_by?: string | null
@@ -1438,6 +1811,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          branch_id?: string | null
           brand_id?: string
           commission_approved_at?: string | null
           commission_approved_by?: string | null
@@ -1458,6 +1832,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "trainer_sessions_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trainer_sessions_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "v_branch_summary"
+            referencedColumns: ["branch_id"]
+          },
           {
             foreignKeyName: "trainer_sessions_brand_id_fkey"
             columns: ["brand_id"]
@@ -1770,6 +2158,28 @@ export type Database = {
           },
         ]
       }
+      v_branch_summary: {
+        Row: {
+          active_members: number | null
+          branch_id: string | null
+          branch_name: string | null
+          brand_id: string | null
+          checkins_this_month: number | null
+          checkins_today: number | null
+          is_active: boolean | null
+          revenue_this_month: number | null
+          sessions_this_month: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "branches_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_class_attendance_summary: {
         Row: {
           attended_count: number | null
@@ -2012,6 +2422,7 @@ export type Database = {
     }
     Functions: {
       get_auth_user_id_by_email: { Args: { p_email: string }; Returns: string }
+      get_my_branch_id: { Args: never; Returns: string }
       get_my_brand_id: { Args: never; Returns: string }
       get_my_role: {
         Args: never
@@ -2050,6 +2461,7 @@ export type Database = {
         | "trainer"
         | "member"
         | "support"
+        | "branch_manager"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2207,6 +2619,7 @@ export const Constants = {
         "trainer",
         "member",
         "support",
+        "branch_manager",
       ],
     },
   },

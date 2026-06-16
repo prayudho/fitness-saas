@@ -54,8 +54,11 @@ CREATE TABLE IF NOT EXISTS branch_targets (
 );
 
 -- Staff → branch assignment (many-to-many, one primary per staff member)
+-- profile_id stores auth.users.id (profiles.id) — references auth.users directly
+-- because profiles.id lacks a standalone unique constraint after migration 008
+-- introduced a surrogate PK (profile_id) with a composite unique on (id, brand_id).
 CREATE TABLE IF NOT EXISTS staff_branches (
-  profile_id UUID    NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  profile_id UUID    NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   branch_id  UUID    NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
   is_primary BOOLEAN NOT NULL DEFAULT false,
   PRIMARY KEY (profile_id, branch_id)
@@ -255,11 +258,13 @@ BEGIN
   RAISE NOTICE 'Backfilled branch_id for % invoices', v_count;
 
   -- 6g. Seed staff_branches: insert Main Branch as primary for all staff
+  -- Cast role to text to avoid "unsafe use of new enum value in same transaction" error
+  -- (branch_manager was just added by ALTER TYPE above; text cast bypasses PG's compile-time check)
   INSERT INTO staff_branches (profile_id, branch_id, is_primary)
   SELECT p.id, b.id, true
   FROM   profiles p
   JOIN   branches b ON b.brand_id = p.brand_id AND b.name = 'Main Branch'
-  WHERE  p.role IN ('staff', 'branch_manager')
+  WHERE  p.role::text IN ('staff', 'branch_manager')
     AND  p.brand_id IS NOT NULL
   ON CONFLICT (profile_id, branch_id) DO NOTHING;
 
@@ -370,7 +375,7 @@ CREATE POLICY "branches_insert" ON branches FOR INSERT WITH CHECK (
 CREATE POLICY "branches_update" ON branches FOR UPDATE USING (
   is_superadmin()
   OR (brand_id = get_my_brand_id() AND get_my_role() = 'admin')
-  OR (id = get_my_branch_id() AND get_my_role() = 'branch_manager')
+  OR (id = get_my_branch_id() AND get_my_role()::text = 'branch_manager')
 );
 CREATE POLICY "branches_delete" ON branches FOR DELETE USING (
   is_superadmin()
@@ -393,7 +398,7 @@ CREATE POLICY "branch_targets_write" ON branch_targets FOR ALL USING (
     SELECT 1 FROM branches b
     WHERE b.id = branch_targets.branch_id
       AND b.brand_id = get_my_brand_id()
-      AND get_my_role() IN ('admin', 'branch_manager')
+      AND get_my_role()::text IN ('admin', 'branch_manager')
   )
 );
 
@@ -449,12 +454,12 @@ CREATE POLICY "scope_changes_select" ON membership_scope_changes FOR SELECT USIN
     SELECT 1 FROM memberships m
     WHERE m.id = membership_scope_changes.membership_id
       AND m.brand_id = get_my_brand_id()
-      AND get_my_role() IN ('admin', 'branch_manager')
+      AND get_my_role()::text IN ('admin', 'branch_manager')
   )
 );
 CREATE POLICY "scope_changes_insert" ON membership_scope_changes FOR INSERT WITH CHECK (
   is_superadmin()
-  OR get_my_role() IN ('admin', 'branch_manager')
+  OR get_my_role()::text IN ('admin', 'branch_manager')
 );
 
 -- =============================================================================
@@ -474,7 +479,7 @@ CREATE POLICY "profiles_select" ON profiles FOR SELECT USING (
   )
   OR (
     -- branch_manager: see members whose home_branch_id is their branch
-    get_my_role() = 'branch_manager'
+    get_my_role()::text = 'branch_manager'
     AND brand_id = get_my_brand_id()
     AND home_branch_id = get_my_branch_id()
   )
@@ -507,7 +512,7 @@ CREATE POLICY "memberships_select" ON memberships FOR SELECT USING (
   OR member_id = auth.uid()
   OR (
     -- branch_manager: see memberships of members in their branch
-    get_my_role() = 'branch_manager'
+    get_my_role()::text = 'branch_manager'
     AND brand_id = get_my_brand_id()
     AND EXISTS (
       SELECT 1 FROM profiles p
@@ -523,7 +528,7 @@ CREATE POLICY "memberships_write" ON memberships FOR ALL USING (
   OR (brand_id = get_my_brand_id() AND get_my_role() IN ('admin', 'staff'))
   OR (
     -- branch_manager can update scope for members in their branch
-    get_my_role() = 'branch_manager'
+    get_my_role()::text = 'branch_manager'
     AND brand_id = get_my_brand_id()
     AND EXISTS (
       SELECT 1 FROM profiles p
@@ -541,7 +546,7 @@ CREATE POLICY "classes_select" ON classes FOR SELECT USING (
   is_superadmin()
   OR (brand_id = get_my_brand_id() AND get_my_role() IN ('admin', 'staff', 'trainer', 'member'))
   OR (
-    get_my_role() = 'branch_manager'
+    get_my_role()::text = 'branch_manager'
     AND brand_id = get_my_brand_id()
     AND branch_id = get_my_branch_id()
   )
@@ -563,7 +568,7 @@ CREATE POLICY "checkins_select" ON checkins FOR SELECT USING (
   OR (brand_id = get_my_brand_id() AND get_my_role() IN ('admin', 'staff'))
   OR member_id = auth.uid()
   OR (
-    get_my_role() = 'branch_manager'
+    get_my_role()::text = 'branch_manager'
     AND brand_id = get_my_brand_id()
     AND branch_id = get_my_branch_id()
   )
@@ -579,7 +584,7 @@ CREATE POLICY "tsessions_select" ON trainer_sessions FOR SELECT USING (
   OR trainer_id = auth.uid()
   OR member_id  = auth.uid()
   OR (
-    get_my_role() = 'branch_manager'
+    get_my_role()::text = 'branch_manager'
     AND brand_id = get_my_brand_id()
     AND branch_id = get_my_branch_id()
   )
@@ -601,7 +606,7 @@ CREATE POLICY "invoices_select" ON invoices FOR SELECT USING (
   OR (brand_id = get_my_brand_id() AND get_my_role() IN ('admin', 'staff'))
   OR member_id = auth.uid()
   OR (
-    get_my_role() = 'branch_manager'
+    get_my_role()::text = 'branch_manager'
     AND brand_id = get_my_brand_id()
     AND branch_id = get_my_branch_id()
   )
@@ -625,10 +630,10 @@ SELECT
   b.name                                                 AS branch_name,
   b.is_active,
   COUNT(DISTINCT ch.id)
-    FILTER (WHERE ch.created_at >= date_trunc('month', NOW()))
+    FILTER (WHERE ch.checked_in_at >= date_trunc('month', NOW()))
                                                          AS checkins_this_month,
   COUNT(DISTINCT ch.id)
-    FILTER (WHERE ch.created_at >= CURRENT_DATE)         AS checkins_today,
+    FILTER (WHERE ch.checked_in_at >= CURRENT_DATE)         AS checkins_today,
   COUNT(DISTINCT m.id)
     FILTER (WHERE m.gym_access_status = 'active')        AS active_members,
   COALESCE(SUM(inv.amount)

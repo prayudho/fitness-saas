@@ -251,7 +251,6 @@ export async function createBrand(data: {
 
     // Seed Main Branch for the new brand (T5: every brand gets one on creation)
     try {
-      // @ts-expect-error — branches not yet in generated types; resolved after supabase gen types
       await supabase.from('branches').insert({ brand_id: brand.id, name: 'Main Branch', is_active: true })
     } catch { /* non-fatal — migration 023 backfill covers existing brands */ }
 
