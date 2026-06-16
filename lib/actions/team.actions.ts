@@ -148,13 +148,15 @@ export async function inviteTeamMember(
   userId = authData.user.id
 
   // Update the profile the trigger just created.
-  // We explicitly set brand_id here in case the trigger left it NULL
-  // (GoTrue sometimes doesn't propagate app_metadata before the trigger fires).
+  // We explicitly set brand_id and role here in case the trigger left them as
+  // defaults (GoTrue sometimes doesn't propagate app_metadata before the trigger
+  // fires, causing brand_id=NULL and role='member').
   // Filtering only by id is safe for new users — they have exactly one profile row.
   const { error: profileError } = await supabase
     .from('profiles')
     .update({
       brand_id:             brandId,
+      role:                 role as Database['public']['Enums']['user_role'],
       full_name:            fullName,
       custom_role_id:       customRoleId ?? null,
       branch_id:            role === 'branch_manager' ? (branchId ?? null) : null,
