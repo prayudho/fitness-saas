@@ -18,6 +18,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  DollarSign,
+  Receipt,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -26,14 +28,16 @@ import { signOut } from '@/lib/actions/auth'
 const STORAGE_KEY = 'branch-manager-sidebar-collapsed'
 
 const NAV_ITEMS = [
-  { href: '/branch-manager',           label: 'Dashboard',  icon: LayoutDashboard },
-  { href: '/branch-manager/members',   label: 'Members',    icon: Users },
-  { href: '/branch-manager/classes',   label: 'Classes',    icon: CalendarDays },
-  { href: '/branch-manager/checkins',  label: 'Check-ins',  icon: ScanLine },
-  { href: '/branch-manager/trainers',  label: 'Trainers',   icon: UserCheck },
-  { href: '/branch-manager/team',      label: 'Team',       icon: UsersRound },
-  { href: '/branch-manager/reports',   label: 'Reports',    icon: BarChart3 },
-  { href: '/branch-manager/account',   label: 'My Account', icon: KeyRound },
+  { href: '/branch-manager',              label: 'Dashboard',   icon: LayoutDashboard },
+  { href: '/branch-manager/members',      label: 'Members',     icon: Users },
+  { href: '/branch-manager/classes',      label: 'Classes',     icon: CalendarDays },
+  { href: '/branch-manager/checkins',     label: 'Check-ins',   icon: ScanLine },
+  { href: '/branch-manager/trainers',     label: 'Trainers',    icon: UserCheck },
+  { href: '/branch-manager/team',         label: 'Team',        icon: UsersRound },
+  { href: '/branch-manager/commissions',  label: 'Commissions', icon: DollarSign },
+  { href: '/branch-manager/billing',      label: 'Billing',     icon: Receipt },
+  { href: '/branch-manager/reports',      label: 'Reports',     icon: BarChart3 },
+  { href: '/branch-manager/account',      label: 'My Account',  icon: KeyRound },
 ]
 
 function NavLinks({

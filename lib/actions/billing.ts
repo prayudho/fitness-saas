@@ -35,6 +35,7 @@ export async function getInvoices(filters?: {
   status?: string
   page?: number
   limit?: number
+  branchId?: string
 }): Promise<{ data: InvoiceWithDetails[]; count: number; error?: string }> {
   try {
     const supabase = createClient()
@@ -59,6 +60,10 @@ export async function getInvoices(filters?: {
       query = query.eq('status', filters.status)
     }
 
+    if (filters?.branchId) {
+      query = query.eq('branch_id', filters.branchId)
+    }
+
     const { data: rawData, error, count } = await query
     if (error) return { data: [], count: 0, error: error.message }
 
@@ -69,7 +74,7 @@ export async function getInvoices(filters?: {
 }
 
 // M1: separate, full-dataset stats query (not limited to current page)
-export async function getInvoiceStats(): Promise<{ data?: InvoiceStats; error?: string }> {
+export async function getInvoiceStats(filters?: { branchId?: string }): Promise<{ data?: InvoiceStats; error?: string }> {
   try {
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
@@ -79,10 +84,16 @@ export async function getInvoiceStats(): Promise<{ data?: InvoiceStats; error?: 
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
-    const { data: rawRows, error } = await supabase
+    let statsQuery = supabase
       .from('invoices')
       .select('status, amount, paid_at, currency')
       .eq('brand_id', brandId)
+
+    if (filters?.branchId) {
+      statsQuery = statsQuery.eq('branch_id', filters.branchId)
+    }
+
+    const { data: rawRows, error } = await statsQuery
 
     if (error) return { error: error.message }
 

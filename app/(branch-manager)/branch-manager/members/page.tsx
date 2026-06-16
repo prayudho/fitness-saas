@@ -51,6 +51,15 @@ const columns: ColumnDef<ProfileWithMembership>[] = [
       return <span className="text-sm">{new Date(v).toLocaleDateString()}</span>
     },
   },
+  {
+    id: 'actions',
+    header: '',
+    cell: ({ row }) => (
+      <Button variant="ghost" size="sm" asChild>
+        <Link href={`/branch-manager/members/${row.original.id}`}>View</Link>
+      </Button>
+    ),
+  },
 ]
 
 export default function BranchManagerMembersPage() {

@@ -1,11 +1,14 @@
 'use client'
 
+import Link from 'next/link'
 import { PageHeader } from '@/components/shared/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { useBranchManagerDashboard } from '@/lib/hooks/use-branches'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency } from '@/lib/utils'
 import { format } from 'date-fns'
+import { CalendarClock } from 'lucide-react'
 
 export default function BranchManagerReportsPage() {
   const { data, isLoading } = useBranchManagerDashboard()
@@ -15,6 +18,14 @@ export default function BranchManagerReportsPage() {
       <PageHeader
         title="Reports"
         description="Branch performance summary"
+        action={
+          <Button asChild variant="outline" size="sm">
+            <Link href="/branch-manager/reports/expiry">
+              <CalendarClock className="mr-2 h-4 w-4" />
+              Expiry Report
+            </Link>
+          </Button>
+        }
       />
 
       {isLoading ? (

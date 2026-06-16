@@ -430,3 +430,20 @@ export async function getBranchesByBrandId(
     return { data: [], error: err instanceof Error ? err.message : 'An error occurred' }
   }
 }
+
+export async function getCurrentBranchId(): Promise<{ branchId: string | null; error: string | null }> {
+  try {
+    const supabase = createClient()
+    const { profile } = await getAuthedProfile(supabase)
+    if ((profile.role as string) !== 'branch_manager') return { branchId: null, error: null }
+    const { data } = await supabase
+      .from('profiles')
+      .select('branch_id' as never)
+      .eq('id', profile.id)
+      .single()
+    const branchId = data ? (data as unknown as { branch_id: string | null }).branch_id : null
+    return { branchId, error: null }
+  } catch (e) {
+    return { branchId: null, error: e instanceof Error ? e.message : 'An error occurred' }
+  }
+}
