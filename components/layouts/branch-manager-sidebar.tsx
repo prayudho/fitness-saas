@@ -13,6 +13,7 @@ import {
   KeyRound,
   Building2,
   UsersRound,
+  LogOut,
   Menu,
   X,
   ChevronLeft,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { signOut } from '@/lib/actions/auth'
 
 const STORAGE_KEY = 'branch-manager-sidebar-collapsed'
 
@@ -153,6 +155,17 @@ export function BranchManagerSidebar({ branchName }: { branchName: string }) {
           branchName={branchName}
           onClose={() => setMobileOpen(false)}
         />
+        <div className="border-t p-3">
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors min-h-[44px]"
+            >
+              <LogOut className="h-4 w-4 flex-shrink-0" />
+              Sign out
+            </button>
+          </form>
+        </div>
       </aside>
 
       {/* Desktop sidebar */}
@@ -164,12 +177,12 @@ export function BranchManagerSidebar({ branchName }: { branchName: string }) {
       >
         <NavLinks collapsed={collapsed} branchName={branchName} />
 
-        {/* Collapse toggle */}
-        <div className="border-t p-2">
+        {/* Footer: collapse toggle + logout */}
+        <div className="border-t p-2 flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 w-full"
+            className="h-8 w-8 flex-1"
             onClick={toggleCollapsed}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
@@ -179,6 +192,16 @@ export function BranchManagerSidebar({ branchName }: { branchName: string }) {
               <ChevronLeft className="h-4 w-4" />
             )}
           </Button>
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </form>
         </div>
       </aside>
     </>
