@@ -12,6 +12,7 @@ export type BrandWithOwner = {
   owner_user_id: string | null
   subscription_plan: string
   is_active: boolean
+  is_multi_branch: boolean
   created_at: string
   updated_at: string
   owner_email: string | null
@@ -249,6 +250,11 @@ export async function createBrand(data: {
       return { error: profileError.message }
     }
 
+    // Enterprise plan automatically gets multi-branch enabled
+    if (data.plan === 'enterprise') {
+      await supabase.from('brands').update({ is_multi_branch: true }).eq('id', brand.id)
+    }
+
     // Seed Main Branch for the new brand (T5: every brand gets one on creation)
     try {
       await supabase.from('branches').insert({ brand_id: brand.id, name: 'Main Branch', is_active: true })
@@ -297,6 +303,24 @@ export async function activateBrand(id: string): Promise<{ error: string | null 
     return { error: null }
   } catch (err) {
     console.error('activateBrand error:', err)
+    return { error: 'Unexpected error.' }
+  }
+}
+
+export async function toggleMultiBranch(id: string, enabled: boolean): Promise<{ error: string | null }> {
+  try {
+    const supabase = createServiceClient()
+    const { error } = await supabase
+      .from('brands')
+      .update({ is_multi_branch: enabled })
+      .eq('id', id)
+
+    if (error) return { error: error.message }
+    revalidatePath('/superadmin/brands')
+    revalidatePath(`/superadmin/brands/${id}`)
+    return { error: null }
+  } catch (err) {
+    console.error('toggleMultiBranch error:', err)
     return { error: 'Unexpected error.' }
   }
 }

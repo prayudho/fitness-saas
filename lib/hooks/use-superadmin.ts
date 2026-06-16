@@ -9,6 +9,7 @@ import {
   createBrand,
   suspendBrand,
   activateBrand,
+  toggleMultiBranch,
 } from '@/lib/actions/superadmin'
 
 export function usePlatformStats() {
@@ -100,6 +101,22 @@ export function useActivateBrand() {
       qc.invalidateQueries({ queryKey: ['brands'] })
       qc.invalidateQueries({ queryKey: ['platform-stats'] })
       toast.success('Brand activated.')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+export function useToggleMultiBranch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
+      const result = await toggleMultiBranch(id, enabled)
+      if (result.error) throw new Error(result.error)
+      return result
+    },
+    onSuccess: (_, { enabled }) => {
+      qc.invalidateQueries({ queryKey: ['brands'] })
+      toast.success(enabled ? 'Multi-branch enabled.' : 'Multi-branch disabled.')
     },
     onError: (e: Error) => toast.error(e.message),
   })

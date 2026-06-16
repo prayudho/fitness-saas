@@ -13,17 +13,20 @@ import {
   Mail,
   ExternalLink,
   UserPlus,
+  GitBranch,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useBrandDetail, useSuspendBrand, useActivateBrand } from '@/lib/hooks/use-superadmin'
+import { useBrandDetail, useSuspendBrand, useActivateBrand, useToggleMultiBranch } from '@/lib/hooks/use-superadmin'
 import { useTeamMembers } from '@/lib/hooks/use-team'
 import { inviteTeamMember } from '@/lib/actions/team.actions'
 import type { TeamMember } from '@/lib/actions/team.actions'
 import { inviteTeamMemberSchema, type InviteTeamMemberInput } from '@/lib/validations/team'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -372,6 +375,7 @@ export default function BrandDetailPage() {
   const { data: brand, isLoading, isError } = useBrandDetail(id)
   const suspendBrand = useSuspendBrand()
   const activateBrand = useActivateBrand()
+  const toggleMultiBranch = useToggleMultiBranch()
 
   if (isLoading) {
     return (
@@ -539,6 +543,39 @@ export default function BrandDetailPage() {
             <ExternalLink className="mr-2 h-4 w-4" />
             View as Admin
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Feature flags */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">Feature Flags</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-md bg-indigo-50 p-2 mt-0.5">
+                <GitBranch className="h-4 w-4 text-indigo-600" />
+              </div>
+              <div>
+                <Label htmlFor="multi-branch-toggle" className="text-sm font-medium cursor-pointer">
+                  Multi-Branch
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Allows this brand to manage multiple physical locations with separate staff,
+                  classes, and check-ins. Recommended for Enterprise plans.
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="multi-branch-toggle"
+              checked={brand.is_multi_branch}
+              disabled={toggleMultiBranch.isPending}
+              onCheckedChange={(checked) =>
+                toggleMultiBranch.mutate({ id, enabled: checked })
+              }
+            />
+          </div>
         </CardContent>
       </Card>
 
