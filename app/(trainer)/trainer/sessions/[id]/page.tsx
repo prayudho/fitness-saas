@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
 import { ArrowLeft, ClipboardList, CheckCircle, Clock, User } from 'lucide-react'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
@@ -66,7 +65,11 @@ export default function TrainerSessionDetailPage({ params }: PageProps) {
     )
   }
 
-  if (!data) notFound()
+  if (!data) return (
+    <div className="p-6 text-center text-muted-foreground">
+      Session not found.
+    </div>
+  )
 
   const { session, log } = data
   const member = session.member as { id: string; full_name: string | null } | null

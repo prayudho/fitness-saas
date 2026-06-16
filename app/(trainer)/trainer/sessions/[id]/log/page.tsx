@@ -85,7 +85,11 @@ export default function WorkoutLogPage({ params }: PageProps) {
     )
   }
 
-  if (!data) return null
+  if (!data) return (
+    <div className="p-6 text-center text-muted-foreground">
+      Session not found or could not be loaded.
+    </div>
+  )
 
   const { session } = data
   const member      = session.member as { id: string; full_name: string | null } | null

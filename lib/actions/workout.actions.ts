@@ -205,13 +205,12 @@ export async function getTrainerSessionWithLog(
   const typedClient = createClient()
   const supabase    = untyped(typedClient)
 
+  // Fetch session and workout log in parallel; member is fetched separately to
+  // avoid relying on a PostgREST FK hint that differs between environments.
   const [sessionResult, logResult] = await Promise.all([
     typedClient
       .from('trainer_sessions')
-      .select(`
-        id, scheduled_at, duration_minutes, status, notes, session_fee,
-        member:profiles!trainer_sessions_member_id_fkey(id, full_name)
-      `)
+      .select('id, scheduled_at, duration_minutes, status, notes, session_fee, member_id')
       .eq('id', sessionId)
       .single(),
     supabase
@@ -223,19 +222,38 @@ export async function getTrainerSessionWithLog(
 
   if (sessionResult.error) return { data: null, error: sessionResult.error.message }
 
-  const rawSession = sessionResult.data as unknown as TrainerSessionWithLogData['session'] & {
+  const raw = sessionResult.data as {
+    id: string
+    scheduled_at: string
+    duration_minutes: number
+    status: string
     notes: string | null
     session_fee: number | null
-    member: unknown
+    member_id: string | null
   }
+
+  // Fetch member name separately to avoid composite-FK join issues
+  let member: { id: string; full_name: string | null } | null = null
+  if (raw.member_id) {
+    const { data: memberData } = await typedClient
+      .from('profiles')
+      .select('id, full_name')
+      .eq('id', raw.member_id)
+      .maybeSingle()
+    if (memberData) {
+      const m = memberData as unknown as { id: string; full_name: string | null }
+      member = { id: m.id, full_name: m.full_name }
+    }
+  }
+
   const session: TrainerSessionWithLogData['session'] = {
-    id:               rawSession.id,
-    scheduled_at:     rawSession.scheduled_at,
-    duration_minutes: rawSession.duration_minutes,
-    status:           rawSession.status,
-    notes:            rawSession.notes ?? null,
-    session_fee:      rawSession.session_fee ?? null,
-    member:           rawSession.member as { id: string; full_name: string | null } | null,
+    id:               raw.id,
+    scheduled_at:     raw.scheduled_at,
+    duration_minutes: raw.duration_minutes,
+    status:           raw.status,
+    notes:            raw.notes ?? null,
+    session_fee:      raw.session_fee ?? null,
+    member,
   }
 
   return {

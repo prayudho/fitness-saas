@@ -245,7 +245,7 @@ export async function createBrand(data: {
     }
 
     // Seed the exercise library for this new brand (non-fatal if it fails)
-    await supabase.rpc('seed_brand_exercises', { p_brand_id: brand.id }).catch(() => null)
+    try { await supabase.rpc('seed_brand_exercises', { p_brand_id: brand.id }) } catch { /* ignore */ }
 
     revalidatePath('/superadmin/brands')
     return { error: null, brandId: brand.id }
