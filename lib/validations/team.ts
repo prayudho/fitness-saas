@@ -25,8 +25,9 @@ export const inviteTeamMemberSchema = z.object({
   fullName:       z.string().min(2, 'Full name must be at least 2 characters'),
   email:          z.string().email('Invalid email address'),
   phone:          z.string().optional(),
-  role:           z.enum(['admin', 'staff', 'trainer', 'support', 'member']),
+  role:           z.enum(['admin', 'staff', 'trainer', 'support', 'member', 'branch_manager']),
   customRoleId:   z.string().uuid('Invalid custom role ID').optional(),
+  branchId:       z.string().uuid('Invalid branch ID').optional(),
   tempPassword:   z.string().min(8, 'Password must be at least 8 characters'),
 })
 
@@ -38,8 +39,9 @@ export type InviteTeamMemberInput = z.infer<typeof inviteTeamMemberSchema>
 export const updateTeamMemberSchema = z.object({
   fullName:     z.string().min(2, 'Full name must be at least 2 characters').optional(),
   phone:        z.string().optional(),
-  role:         z.enum(['admin', 'staff', 'trainer', 'support', 'member']).optional(),
+  role:         z.enum(['admin', 'staff', 'trainer', 'support', 'member', 'branch_manager']).optional(),
   customRoleId: z.string().uuid('Invalid custom role ID').optional(),
+  branchId:     z.string().uuid('Invalid branch ID').optional(),
 })
 
 export type UpdateTeamMemberInput = z.infer<typeof updateTeamMemberSchema>

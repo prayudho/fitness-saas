@@ -16,11 +16,12 @@ import {
   GitBranch,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useBrandDetail, useSuspendBrand, useActivateBrand, useToggleMultiBranch } from '@/lib/hooks/use-superadmin'
 import { useTeamMembers } from '@/lib/hooks/use-team'
+import { getBranchesByBrandId } from '@/lib/actions/branches.actions'
 import { inviteTeamMember } from '@/lib/actions/team.actions'
 import type { TeamMember } from '@/lib/actions/team.actions'
 import { inviteTeamMemberSchema, type InviteTeamMemberInput } from '@/lib/validations/team'
@@ -88,14 +89,24 @@ function getInitials(name: string): string {
 // ----------------------------------------------------------------
 function InviteTeamMemberSheet({
   brandId,
+  isMultiBranch,
   open,
   onOpenChange,
 }: {
   brandId: string
+  isMultiBranch: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
   const qc = useQueryClient()
+
+  const { data: branchesData } = useQuery({
+    queryKey: ['branches', 'by-brand', brandId],
+    queryFn: () => getBranchesByBrandId(brandId),
+    enabled: isMultiBranch,
+    staleTime: 60_000,
+  })
+  const branches = branchesData?.data ?? []
 
   const form = useForm<InviteTeamMemberInput>({
     resolver: zodResolver(inviteTeamMemberSchema),
@@ -105,9 +116,13 @@ function InviteTeamMemberSheet({
       email: '',
       phone: '',
       role: 'staff',
+      branchId: undefined,
       tempPassword: '',
     },
   })
+
+  const watchedRole = useWatch({ control: form.control, name: 'role' })
+  const showBranchSelect = isMultiBranch && ['staff', 'trainer', 'branch_manager'].includes(watchedRole)
 
   const invite = useMutation({
     mutationFn: async (data: InviteTeamMemberInput) => {
@@ -118,7 +133,7 @@ function InviteTeamMemberSheet({
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['team', 'list', brandId] })
       toast.success('Team member invited successfully!')
-      form.reset({ brandId, fullName: '', email: '', phone: '', role: 'staff', tempPassword: '' })
+      form.reset({ brandId, fullName: '', email: '', phone: '', role: 'staff', branchId: undefined, tempPassword: '' })
       onOpenChange(false)
     },
     onError: (e: Error) => toast.error(e.message),
@@ -212,6 +227,9 @@ function InviteTeamMemberSheet({
                       <SelectItem value="admin">Admin</SelectItem>
                       <SelectItem value="staff">Staff</SelectItem>
                       <SelectItem value="trainer">Trainer</SelectItem>
+                      {isMultiBranch && (
+                        <SelectItem value="branch_manager">Branch Manager</SelectItem>
+                      )}
                       <SelectItem value="support">Support</SelectItem>
                     </SelectContent>
                   </Select>
@@ -219,6 +237,42 @@ function InviteTeamMemberSheet({
                 </FormItem>
               )}
             />
+
+            {showBranchSelect && (
+              <FormField
+                control={form.control}
+                name="branchId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {watchedRole === 'branch_manager' ? 'Managed Branch' : 'Home Branch'}
+                      {watchedRole !== 'branch_manager' && (
+                        <span className="text-muted-foreground font-normal"> (optional)</span>
+                      )}
+                    </FormLabel>
+                    <Select
+                      value={field.value ?? ''}
+                      onValueChange={field.onChange}
+                      disabled={invite.isPending}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select branch" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {branches.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}
@@ -259,7 +313,7 @@ function InviteTeamMemberSheet({
 // ----------------------------------------------------------------
 // Team members table for the brand detail page
 // ----------------------------------------------------------------
-function BrandTeamSection({ brandId }: { brandId: string }) {
+function BrandTeamSection({ brandId, isMultiBranch }: { brandId: string; isMultiBranch: boolean }) {
   const [sheetOpen, setSheetOpen] = React.useState(false)
 
   const { data, isLoading, isError, error } = useTeamMembers(brandId)
@@ -340,6 +394,7 @@ function BrandTeamSection({ brandId }: { brandId: string }) {
 
       <InviteTeamMemberSheet
         brandId={brandId}
+        isMultiBranch={isMultiBranch}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />
@@ -580,7 +635,7 @@ export default function BrandDetailPage() {
       </Card>
 
       {/* Team members */}
-      <BrandTeamSection brandId={id} />
+      <BrandTeamSection brandId={id} isMultiBranch={brand.is_multi_branch} />
 
       {/* Danger zone */}
       <Card className="border-red-200">

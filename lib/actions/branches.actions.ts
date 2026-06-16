@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getAuthedProfile } from '@/lib/actions/utils'
 import { z } from 'zod'
@@ -405,5 +405,25 @@ export async function updateBranch(
     return { data: data as BranchRow, error: null }
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : 'An error occurred' }
+  }
+}
+
+// Service-role fetch — for superadmin context where the caller has no brand profile
+export async function getBranchesByBrandId(
+  brandId: string
+): Promise<{ data: Pick<BranchRow, 'id' | 'name'>[]; error: string | null }> {
+  try {
+    const supabase = createServiceClient()
+    const { data, error } = await supabase
+      .from('branches')
+      .select('id, name')
+      .eq('brand_id', brandId)
+      .eq('is_active', true)
+      .order('name', { ascending: true })
+
+    if (error) throw error
+    return { data: (data ?? []) as Pick<BranchRow, 'id' | 'name'>[], error: null }
+  } catch (err) {
+    return { data: [], error: err instanceof Error ? err.message : 'An error occurred' }
   }
 }

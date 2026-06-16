@@ -11,6 +11,7 @@ import { ArrowLeft, Loader2, Eye, EyeOff, Info } from 'lucide-react'
 import { inviteTeamMemberSchema, type InviteTeamMemberInput } from '@/lib/validations/team'
 import { useRole } from '@/lib/hooks/use-role'
 import { useCustomRoles } from '@/lib/hooks/use-team'
+import { useBranchList } from '@/lib/hooks/use-branches'
 import { inviteTeamMember } from '@/lib/actions/team.actions'
 
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,7 @@ export default function NewTeamMemberPage() {
   const [isPending, setIsPending] = useState(false)
 
   const { data: customRoles } = useCustomRoles(brandId ?? '')
+  const { data: branchData } = useBranchList()
 
   const form = useForm<InviteTeamMemberInput>({
     resolver: zodResolver(inviteTeamMemberSchema),
@@ -49,6 +51,7 @@ export default function NewTeamMemberPage() {
       phone: '',
       role: 'staff',
       customRoleId: undefined,
+      branchId: undefined,
       tempPassword: '',
     },
   })
@@ -58,6 +61,9 @@ export default function NewTeamMemberPage() {
 
   const hasCustomRoles = (customRoles ?? []).length > 0
   const showCustomRoleSelect = watchedRole === 'support' && hasCustomRoles
+  const isMultiBranch = branchData?.isMultiBranch ?? false
+  const branches = branchData?.data ?? []
+  const showBranchSelect = isMultiBranch && ['staff', 'trainer', 'branch_manager'].includes(watchedRole)
 
   async function onSubmit(data: InviteTeamMemberInput) {
     setIsPending(true)
@@ -156,6 +162,9 @@ export default function NewTeamMemberPage() {
                         if (val !== 'support') {
                           form.setValue('customRoleId', undefined)
                         }
+                        if (!['staff', 'trainer', 'branch_manager'].includes(val)) {
+                          form.setValue('branchId', undefined)
+                        }
                       }}
                       defaultValue={field.value}
                     >
@@ -168,6 +177,9 @@ export default function NewTeamMemberPage() {
                         <SelectItem value="admin">Admin</SelectItem>
                         <SelectItem value="staff">Staff</SelectItem>
                         <SelectItem value="trainer">Trainer</SelectItem>
+                        {isMultiBranch && (
+                          <SelectItem value="branch_manager">Branch Manager</SelectItem>
+                        )}
                         <SelectItem value="support">Support</SelectItem>
                       </SelectContent>
                     </Select>
@@ -193,6 +205,38 @@ export default function NewTeamMemberPage() {
                           {(customRoles ?? []).map((cr) => (
                             <SelectItem key={cr.id} value={cr.id}>
                               Custom: {cr.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {showBranchSelect && (
+                <FormField
+                  control={form.control}
+                  name="branchId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        {watchedRole === 'branch_manager' ? 'Managed Branch' : 'Home Branch'}
+                        {watchedRole !== 'branch_manager' && (
+                          <span className="text-muted-foreground font-normal"> (optional)</span>
+                        )}
+                      </FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select branch" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {branches.map((b) => (
+                            <SelectItem key={b.id} value={b.id}>
+                              {b.name}
                             </SelectItem>
                           ))}
                         </SelectContent>

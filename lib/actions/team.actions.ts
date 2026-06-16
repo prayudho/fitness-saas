@@ -59,7 +59,7 @@ export async function inviteTeamMember(
     return { data: null, error: parsed.error.errors[0]?.message ?? 'Validation error' }
   }
 
-  const { brandId, fullName, email, phone, role, customRoleId, tempPassword } = parsed.data
+  const { brandId, fullName, email, phone, role, customRoleId, branchId, tempPassword } = parsed.data
   const supabase = createServiceClient()
 
   // Fetch brand for name/slug
@@ -101,9 +101,11 @@ export async function inviteTeamMember(
         id:                   userId,
         brand_id:             brandId,
         full_name:            fullName,
-        role:                 role as 'admin' | 'staff' | 'trainer' | 'support' | 'member',
+        role:                 role as Database['public']['Enums']['user_role'],
         custom_role_id:       customRoleId ?? null,
-        must_change_password: false,  // they already have their own password
+        branch_id:            role === 'branch_manager' ? (branchId ?? null) : null,
+        home_branch_id:       (role === 'staff' || role === 'trainer') ? (branchId ?? null) : null,
+        must_change_password: false,
         is_active:            true,
         phone:                phone ?? null,
       })
@@ -153,6 +155,8 @@ export async function inviteTeamMember(
     .update({
       full_name:            fullName,
       custom_role_id:       customRoleId ?? null,
+      branch_id:            role === 'branch_manager' ? (branchId ?? null) : null,
+      home_branch_id:       (role === 'staff' || role === 'trainer') ? (branchId ?? null) : null,
       must_change_password: true,
       is_active:            true,
       phone:                phone ?? null,
