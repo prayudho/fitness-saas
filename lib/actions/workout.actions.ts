@@ -183,20 +183,43 @@ export async function getWorkoutLog(trainerSessionId: string) {
 }
 
 export async function getMemberWorkoutHistory(memberId: string) {
-  const supabase = untyped(createClient())
+  const typedClient = createClient()
+  const supabase    = untyped(typedClient)
 
-  const { data, error } = await supabase
+  // workout_logs.trainer_id references auth.users, not profiles — no PostgREST
+  // join is possible for trainer name. Fetch logs + session date separately.
+  const { data: rawLogs, error } = await supabase
     .from('workout_logs')
-    .select(`
-      *,
-      trainer:profiles!workout_logs_trainer_id_fkey(full_name),
-      session:trainer_sessions!workout_logs_trainer_session_id_fkey(scheduled_at, duration_minutes)
-    `)
+    .select('*, session:trainer_sessions!workout_logs_trainer_session_id_fkey(scheduled_at, duration_minutes)')
     .eq('member_id', memberId)
     .order('created_at', { ascending: false })
 
   if (error) return { data: null, error: (error as { message: string }).message }
-  return { data: (data ?? []) as WorkoutLogWithDetails[], error: null }
+
+  const logs = (rawLogs ?? []) as WorkoutLog[]
+
+  // Batch-fetch trainer names from profiles
+  const trainerIds = [...new Set(logs.map((l) => l.trainer_id).filter(Boolean))]
+  const trainerMap: Record<string, string | null> = {}
+  if (trainerIds.length > 0) {
+    const { data: trainers } = await typedClient
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', trainerIds)
+    for (const t of trainers ?? []) {
+      const p = t as unknown as { id: string; full_name: string | null }
+      trainerMap[p.id] = p.full_name
+    }
+  }
+
+  const merged = logs.map((log) => ({
+    ...log,
+    trainer: trainerMap[log.trainer_id] !== undefined
+      ? { full_name: trainerMap[log.trainer_id] }
+      : null,
+  }))
+
+  return { data: merged as WorkoutLogWithDetails[], error: null }
 }
 
 export async function getTrainerSessionWithLog(

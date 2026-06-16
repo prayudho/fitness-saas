@@ -352,6 +352,7 @@ export default function TrainerSessionsPage() {
   const monthOptions = useMemo(() => generateMonthOptions(), [])
   const [selectedMonth, setSelectedMonth]   = useState(monthOptions[0].value)
   const [selectedStatus, setSelectedStatus] = useState('all')
+  const [selectedMember, setSelectedMember] = useState('all')
   const [bookOpen, setBookOpen]             = useState(false)
 
   const { data: sessions = [], isLoading } = useTrainerSessions(user?.id ?? '', {
@@ -361,7 +362,9 @@ export default function TrainerSessionsPage() {
 
   const { data: clients = [] } = useTrainerActiveMembers(user?.id ?? '')
 
-  const filteredSessions = sessions ?? []
+  const filteredSessions = (sessions ?? []).filter(
+    (s) => selectedMember === 'all' || s.member_id === selectedMember
+  )
   const totalRevenue    = filteredSessions.reduce((sum, s) => sum + (s.session_fee ?? 0), 0)
   const totalCommission = filteredSessions.reduce((sum, s) => sum + (s.commission_earned ?? 0), 0)
 
@@ -370,7 +373,12 @@ export default function TrainerSessionsPage() {
       id: 'member',
       header: 'Client',
       cell: ({ row }) => (
-        <span className="font-medium text-sm">{row.original.member?.full_name ?? 'Unknown'}</span>
+        <Link
+          href={`/trainer/sessions/${row.original.id}`}
+          className="font-medium text-sm hover:underline"
+        >
+          {row.original.member?.full_name ?? 'Unknown'}
+        </Link>
       ),
     },
     {
@@ -488,6 +496,20 @@ export default function TrainerSessionsPage() {
             <SelectItem value="completed">Completed</SelectItem>
             <SelectItem value="cancelled">Cancelled</SelectItem>
             <SelectItem value="no_show">No Show</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={selectedMember} onValueChange={setSelectedMember}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="All Clients" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Clients</SelectItem>
+            {clients.map((c) => (
+              <SelectItem key={c.member_id} value={c.member_id}>
+                {c.member_name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
