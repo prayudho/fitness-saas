@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { PageHeader } from '@/components/shared/page-header'
 import { DataTable } from '@/components/shared/data-table'
@@ -55,6 +55,11 @@ export default function MembersPage() {
   const activeCount = activeCountData?.count ?? 0
 
   const members = (membersData?.data ?? []) as MemberRow[]
+  const branches = branchData?.data ?? []
+  const branchMap = useMemo(
+    () => Object.fromEntries(branches.map((b) => [b.id, b.name])),
+    [branches]
+  )
 
   const handleEdit = useCallback(
     (id: string) => {
@@ -95,6 +100,7 @@ export default function MembersPage() {
     onEdit: handleEdit,
     onFreeze: handleFreeze,
     onCancel: handleCancel,
+    branchMap,
   })
 
   return (
@@ -143,15 +149,15 @@ export default function MembersPage() {
           </SelectContent>
         </Select>
 
-        {/* Branch filter — only visible when brand has multiple branches */}
-        {branchData?.isMultiBranch && (branchData.data?.length ?? 0) > 0 && (
+        {/* Branch filter — visible whenever branches exist */}
+        {(branchData?.data?.length ?? 0) > 0 && (
           <Select value={branchId} onValueChange={setBranchId}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="All Branches" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Branches</SelectItem>
-              {(branchData.data ?? []).map((b) => (
+              {(branchData?.data ?? []).map((b) => (
                 <SelectItem key={b.id} value={b.id}>
                   {b.name}
                 </SelectItem>

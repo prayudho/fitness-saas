@@ -285,7 +285,7 @@ export default function CommissionsPage() {
         description="Review and approve trainer and staff commissions."
       />
 
-      {isMultiBranch && (branchData?.data?.length ?? 0) > 0 && (
+      {(branchData?.data?.length ?? 0) > 0 && (
         <div className="flex items-center gap-3">
           <GitBranch className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="text-sm font-medium shrink-0">Branch</span>

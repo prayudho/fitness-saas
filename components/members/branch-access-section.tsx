@@ -18,9 +18,9 @@ export function BranchAccessSection({ memberId, currentHomeBranchId }: Props) {
   const [homeBranchId, setHomeBranchId] = useState(currentHomeBranchId ?? '')
   const [isPending, startTransition] = useTransition()
 
-  if (!branchData?.isMultiBranch) return null
-
   const branches = branchData?.data ?? []
+
+  if (!branches.length) return null
 
   function handleChange(branchId: string) {
     setHomeBranchId(branchId)

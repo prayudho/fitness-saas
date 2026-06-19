@@ -375,7 +375,7 @@ function Step1Form({
           )}
         </div>
 
-        {isMultiBranch && branches.length > 0 && (
+        {branches.length > 0 && (
           <FormField
             control={form.control}
             name="homeBranchId"

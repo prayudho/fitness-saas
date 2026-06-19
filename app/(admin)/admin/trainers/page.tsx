@@ -183,14 +183,14 @@ export default function TrainersPage() {
         description="Manage your personal trainers"
         action={
           <div className="flex gap-2 items-center flex-wrap">
-            {branchData?.isMultiBranch && (branchData.data?.length ?? 0) > 0 && (
+            {(branchData?.data?.length ?? 0) > 0 && (
               <Select value={branchId} onValueChange={setBranchId}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="All Branches" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Branches</SelectItem>
-                  {(branchData.data ?? []).map((b) => (
+                  {(branchData?.data ?? []).map((b) => (
                     <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                   ))}
                 </SelectContent>

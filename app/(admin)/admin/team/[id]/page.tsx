@@ -88,12 +88,13 @@ export default function TeamMemberDetailPage() {
 
   useEffect(() => {
     if (member) {
+      const branchId = member.branch_id ?? member.home_branch_id ?? undefined
       form.reset({
         fullName: member.full_name,
         phone: member.phone ?? '',
         role: member.role as UpdateTeamMemberInput['role'],
         customRoleId: member.custom_role_id ?? undefined,
-        branchId: undefined,
+        branchId,
       })
     }
   }, [member, form])
@@ -141,7 +142,7 @@ export default function TeamMemberDetailPage() {
 
   const hasCustomRoles = (customRoles ?? []).length > 0
   const showCustomRoleSelect = watchedRole === 'support' && hasCustomRoles
-  const showBranchSelect = isMultiBranch && ['staff', 'trainer', 'branch_manager'].includes(watchedRole ?? '')
+  const showBranchSelect = branches.length > 0 && ['staff', 'trainer', 'branch_manager'].includes(watchedRole ?? '')
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -271,9 +272,7 @@ export default function TeamMemberDetailPage() {
                             <SelectItem value="admin">Admin</SelectItem>
                             <SelectItem value="staff">Staff</SelectItem>
                             <SelectItem value="trainer">Trainer</SelectItem>
-                            {isMultiBranch && (
-                              <SelectItem value="branch_manager">Branch Manager</SelectItem>
-                            )}
+                            <SelectItem value="branch_manager">Branch Manager</SelectItem>
                             <SelectItem value="support">Support</SelectItem>
                           </SelectContent>
                         </Select>

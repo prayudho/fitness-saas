@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -13,6 +13,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -30,6 +31,7 @@ import {
   useReactivateTeamMember,
   type TeamMember,
 } from '@/lib/hooks/use-team'
+import { useBranchList } from '@/lib/hooks/use-branches'
 
 function getRoleBadgeClass(role: string): string {
   switch (role) {
@@ -112,60 +114,82 @@ function TeamRowActions({ member }: { member: TeamMember }) {
   )
 }
 
-const columns: ColumnDef<TeamMember>[] = [
-  {
-    id: 'member',
-    header: 'Member',
-    cell: ({ row }) => {
-      const m = row.original
-      const initials = m.full_name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase()
-      return (
-        <div className="flex items-center gap-3">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-          </Avatar>
-          <div>
-            <p className="font-medium text-sm">{m.full_name}</p>
-            {m.phone && <p className="text-xs text-muted-foreground">{m.phone}</p>}
+function getColumns(branchMap: Record<string, string>): ColumnDef<TeamMember>[] {
+  const hasBranches = Object.keys(branchMap).length > 0
+  const cols: ColumnDef<TeamMember>[] = [
+    {
+      id: 'member',
+      header: 'Member',
+      cell: ({ row }) => {
+        const m = row.original
+        const initials = m.full_name
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase()
+        return (
+          <div className="flex items-center gap-3">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="font-medium text-sm">{m.full_name}</p>
+              {m.phone && <p className="text-xs text-muted-foreground">{m.phone}</p>}
+            </div>
           </div>
-        </div>
-      )
+        )
+      },
     },
-  },
-  {
-    id: 'role',
-    header: 'Role',
-    cell: ({ row }) => (
-      <RoleBadge role={row.original.role} customRoleName={row.original.custom_role_name} />
-    ),
-  },
-  {
-    id: 'status',
-    header: 'Status',
-    cell: ({ row }) => (
-      <StatusBadge status={row.original.is_active ? 'active' : 'inactive'} />
-    ),
-  },
-  {
-    id: 'date_added',
-    header: 'Date Added',
-    cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {format(new Date(row.original.created_at), 'dd MMM yyyy')}
-      </span>
-    ),
-  },
-  {
-    id: 'actions',
-    header: '',
-    cell: ({ row }) => <TeamRowActions member={row.original} />,
-  },
-]
+    {
+      id: 'role',
+      header: 'Role',
+      cell: ({ row }) => (
+        <RoleBadge role={row.original.role} customRoleName={row.original.custom_role_name} />
+      ),
+    },
+  ]
+
+  if (hasBranches) {
+    cols.push({
+      id: 'home_branch',
+      header: 'Home Branch',
+      cell: ({ row }) => {
+        const m = row.original
+        const branchId = m.branch_id ?? m.home_branch_id
+        const name = branchId ? branchMap[branchId] : null
+        return name
+          ? <Badge variant="outline" className="text-xs font-normal">{name}</Badge>
+          : <span className="text-muted-foreground text-xs">—</span>
+      },
+    })
+  }
+
+  cols.push(
+    {
+      id: 'status',
+      header: 'Status',
+      cell: ({ row }) => (
+        <StatusBadge status={row.original.is_active ? 'active' : 'inactive'} />
+      ),
+    },
+    {
+      id: 'date_added',
+      header: 'Date Added',
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {format(new Date(row.original.created_at), 'dd MMM yyyy')}
+        </span>
+      ),
+    },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => <TeamRowActions member={row.original} />,
+    }
+  )
+  return cols
+}
 
 function TeamTableSkeleton() {
   return (
@@ -190,8 +214,17 @@ export default function TeamPage() {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [branchFilter, setBranchFilter] = useState('all')
 
   const debouncedSearch = useDebounce(search, 300)
+  const { data: branchData } = useBranchList()
+  const branches = branchData?.data ?? []
+
+  const branchMap = useMemo(
+    () => Object.fromEntries(branches.map((b) => [b.id, b.name])),
+    [branches]
+  )
+  const columns = useMemo(() => getColumns(branchMap), [branchMap])
 
   const isActiveFilter =
     statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined
@@ -202,7 +235,10 @@ export default function TeamPage() {
     isActive: isActiveFilter,
   })
 
-  const members = data?.data ?? []
+  const allMembers = data?.data ?? []
+  const members = branchFilter === 'all'
+    ? allMembers
+    : allMembers.filter((m) => m.branch_id === branchFilter || m.home_branch_id === branchFilter)
 
   return (
     <div className="space-y-6">
@@ -219,7 +255,7 @@ export default function TeamPage() {
         }
       />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center flex-wrap">
         <Input
           placeholder="Search by name or phone..."
           value={search}
@@ -235,6 +271,7 @@ export default function TeamPage() {
             <SelectItem value="admin">Admin</SelectItem>
             <SelectItem value="staff">Staff</SelectItem>
             <SelectItem value="trainer">Trainer</SelectItem>
+            <SelectItem value="branch_manager">Branch Manager</SelectItem>
             <SelectItem value="support">Support</SelectItem>
           </SelectContent>
         </Select>
@@ -248,6 +285,19 @@ export default function TeamPage() {
             <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
         </Select>
+        {branches.length > 0 && (
+          <Select value={branchFilter} onValueChange={setBranchFilter}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="All Branches" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Branches</SelectItem>
+              {branches.map((b) => (
+                <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         <Button variant="outline" size="sm" asChild className="sm:ml-auto">
           <Link href="/admin/team/roles">Manage Custom Roles</Link>

@@ -67,9 +67,8 @@ export default function NewTeamMemberPage() {
 
   const hasCustomRoles = (customRoles ?? []).length > 0
   const showCustomRoleSelect = watchedRole === 'support' && hasCustomRoles
-  const isMultiBranch = branchData?.isMultiBranch ?? false
   const branches = branchData?.data ?? []
-  const showBranchSelect = isMultiBranch && ['staff', 'trainer', 'branch_manager'].includes(watchedRole)
+  const showBranchSelect = branches.length > 0 && ['staff', 'trainer', 'branch_manager'].includes(watchedRole)
 
   async function onSubmit(data: InviteTeamMemberInput) {
     if (!brandId) {
@@ -187,9 +186,7 @@ export default function NewTeamMemberPage() {
                         <SelectItem value="admin">Admin</SelectItem>
                         <SelectItem value="staff">Staff</SelectItem>
                         <SelectItem value="trainer">Trainer</SelectItem>
-                        {isMultiBranch && (
-                          <SelectItem value="branch_manager">Branch Manager</SelectItem>
-                        )}
+                        <SelectItem value="branch_manager">Branch Manager</SelectItem>
                         <SelectItem value="support">Support</SelectItem>
                       </SelectContent>
                     </Select>

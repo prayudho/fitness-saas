@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getAuthedProfile } from '@/lib/actions/utils'
 import {
   saveWorkoutLogSchema,
@@ -183,8 +183,11 @@ export async function getWorkoutLog(trainerSessionId: string) {
 }
 
 export async function getMemberWorkoutHistory(memberId: string) {
-  const typedClient = createClient()
-  const supabase    = untyped(typedClient)
+  // Use service client to bypass RLS so branch managers can read workout logs for their members
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const typedClient = createServiceClient() as any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase    = typedClient as any
 
   // workout_logs.trainer_id references auth.users, not profiles — no PostgREST
   // join is possible for trainer name. Fetch logs + session date separately.

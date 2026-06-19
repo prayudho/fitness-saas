@@ -28,6 +28,8 @@ export type TeamMember = {
   role: string
   custom_role_id: string | null
   custom_role_name: string | null
+  branch_id: string | null
+  home_branch_id: string | null
   is_active: boolean
   must_change_password: boolean
   created_at: string
@@ -46,6 +48,8 @@ export type CustomRole = {
 export type TeamMemberDetail = TeamMember & {
   email: string | null
   auth_created_at: string | null
+  branch_id: string | null
+  home_branch_id: string | null
 }
 
 // ----------------------------------------------------------------
@@ -247,10 +251,10 @@ export async function deactivateTeamMember(
 ): Promise<{ data: null; error: string | null }> {
   const supabase = createServiceClient()
 
-  // Fetch the auth user ID (profile.id == auth.user.id by FK)
+  // Fetch the target profile to get auth user ID and role for authorization
   const { data: profile, error: fetchError } = await supabase
     .from('profiles')
-    .select('id')
+    .select('id, role')
     .eq('id', id)
     .single()
 
@@ -261,6 +265,12 @@ export async function deactivateTeamMember(
   const authSupabase = createClient()
   const { profile: callerProfile } = await getAuthedProfile(authSupabase)
   if (!callerProfile.brand_id) return { data: null, error: 'No brand context' }
+
+  // Branch managers cannot deactivate admin accounts
+  const targetRole = (profile as unknown as { role?: string }).role
+  if ((callerProfile.role as string) === 'branch_manager' && targetRole === 'admin') {
+    return { data: null, error: 'Branch managers cannot deactivate admin accounts' }
+  }
 
   const { error: updateError } = await supabase
     .from('profiles')
@@ -439,6 +449,8 @@ export async function getTeamMembers(
     phone: string | null
     role: string
     custom_role_id: string | null
+    branch_id: string | null
+    home_branch_id: string | null
     is_active: boolean
     must_change_password: boolean
     created_at: string
@@ -449,7 +461,7 @@ export async function getTeamMembers(
   // resolution issues that can cause INNER JOIN behaviour on nullable FKs.
   let query = supabase
     .from('profiles')
-    .select('id, full_name, phone, role, custom_role_id, is_active, must_change_password, created_at, updated_at', { count: 'exact' })
+    .select('id, full_name, phone, role, custom_role_id, branch_id, home_branch_id, is_active, must_change_password, created_at, updated_at', { count: 'exact' })
     .eq('brand_id', effectiveBrandId)
     .neq('role', 'member')
     .order('created_at', { ascending: false })
@@ -497,6 +509,8 @@ export async function getTeamMembers(
     role: p.role,
     custom_role_id: p.custom_role_id,
     custom_role_name: p.custom_role_id ? (roleNameMap[p.custom_role_id] ?? null) : null,
+    branch_id: p.branch_id ?? null,
+    home_branch_id: p.home_branch_id ?? null,
     is_active: p.is_active,
     must_change_password: p.must_change_password,
     created_at: p.created_at,
@@ -563,12 +577,17 @@ export async function getTeamMemberById(
 ): Promise<{ data: TeamMemberDetail | null; error: string | null }> {
   const supabase = createServiceClient()
 
+  const authSupabase = createClient()
+  const { profile: callerProfile } = await getAuthedProfile(authSupabase)
+
   type ProfileWithCustomRole = {
     id: string
     full_name: string
     phone: string | null
     role: string
     custom_role_id: string | null
+    branch_id: string | null
+    home_branch_id: string | null
     is_active: boolean
     must_change_password: boolean
     created_at: string
@@ -576,12 +595,9 @@ export async function getTeamMemberById(
     custom_roles: { name: string } | null
   }
 
-  const authSupabase = createClient()
-  const { profile: callerProfile } = await getAuthedProfile(authSupabase)
-
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, full_name, phone, role, custom_role_id, is_active, must_change_password, created_at, updated_at, custom_roles!custom_role_id(name)')
+    .select('id, full_name, phone, role, custom_role_id, branch_id, home_branch_id, is_active, must_change_password, created_at, updated_at, custom_roles!custom_role_id(name)')
     .eq('id', id)
     .eq('brand_id', callerProfile.brand_id ?? '')
     .single()
@@ -590,7 +606,7 @@ export async function getTeamMemberById(
     return { data: null, error: profileError?.message ?? 'Team member not found' }
   }
 
-  const p = profile as ProfileWithCustomRole
+  const p = profile as unknown as ProfileWithCustomRole
 
   // Fetch auth user for email and auth-level created_at
   const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(id)
@@ -602,6 +618,8 @@ export async function getTeamMemberById(
     role: p.role,
     custom_role_id: p.custom_role_id,
     custom_role_name: p.custom_roles?.name ?? null,
+    branch_id: p.branch_id ?? null,
+    home_branch_id: p.home_branch_id ?? null,
     is_active: p.is_active,
     must_change_password: p.must_change_password,
     created_at: p.created_at,

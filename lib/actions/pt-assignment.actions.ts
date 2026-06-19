@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getAuthedProfile } from '@/lib/actions/utils'
 import type { Database } from '@/types/database'
@@ -529,8 +529,10 @@ export async function listCommissions(
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { data: [], error: 'No brand context' }
 
+    const svc = createServiceClient()
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let query = (supabase as any)
+    let query = (svc as any)
       .from('pt_commission_payouts')
       .select('id, payout_type, amount, status, created_at, approved_at, notes, trainer_id, sales_person_id, trainer_session_id, pt_assignment_id')
       .eq('brand_id', profile.brand_id)
@@ -578,7 +580,7 @@ export async function listCommissions(
     // Build profile name map (direct from profiles table — covers trainers and staff)
     const profileMap: Record<string, string> = {}
     if (profileIds.size > 0) {
-      const { data: rawDirectProfiles } = await supabase
+      const { data: rawDirectProfiles } = await svc
         .from('profiles')
         .select('id, full_name')
         .in('id', [...profileIds])
@@ -592,7 +594,7 @@ export async function listCommissions(
     type SessionRow = { id: string; scheduled_at: string; member_id: string }
     const sessionMap: Record<string, SessionRow> = {}
     if (sessionIds.size > 0) {
-      const { data: rawSessions } = await supabase
+      const { data: rawSessions } = await svc
         .from('trainer_sessions')
         .select('id, scheduled_at, member_id')
         .in('id', [...sessionIds])
@@ -602,7 +604,7 @@ export async function listCommissions(
       }
       const memberIds = sessions.map((s) => s.member_id).filter(Boolean)
       if (memberIds.length > 0) {
-        const { data: rawMemberProfiles } = await supabase
+        const { data: rawMemberProfiles } = await svc
           .from('profiles')
           .select('id, full_name')
           .in('id', memberIds)
@@ -623,7 +625,7 @@ export async function listCommissions(
     const assignmentMap: Record<string, AssignmentRow> = {}
     if (assignmentIds.size > 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: assignments } = await (supabase as any)
+      const { data: assignments } = await (svc as any)
         .from('pt_assignments')
         .select('id, assigned_at, member_id, membership:memberships!pt_assignments_membership_id_fkey(membership_packages(name))')
         .in('id', [...assignmentIds])
@@ -632,7 +634,7 @@ export async function listCommissions(
       }
       const assignmentMemberIds = ((assignments as AssignmentRow[]) ?? []).map((a) => a.member_id).filter(Boolean)
       if (assignmentMemberIds.length > 0) {
-        const { data: rawAssignmentMembers } = await supabase
+        const { data: rawAssignmentMembers } = await svc
           .from('profiles')
           .select('id, full_name')
           .in('id', assignmentMemberIds)

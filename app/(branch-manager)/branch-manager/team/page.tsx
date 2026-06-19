@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { ColumnDef } from '@tanstack/react-table'
 import { format } from 'date-fns'
-import { UserPlus, UserX, UserCheck } from 'lucide-react'
+import { UserPlus, Pencil, UserX, UserCheck } from 'lucide-react'
 
 import { PageHeader } from '@/components/shared/page-header'
 import { DataTable } from '@/components/shared/data-table'
@@ -12,6 +13,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -29,6 +31,7 @@ import {
   useReactivateTeamMember,
   type TeamMember,
 } from '@/lib/hooks/use-team'
+import { useBranchList } from '@/lib/hooks/use-branches'
 
 function getRoleBadgeClass(role: string): string {
   switch (role) {
@@ -49,6 +52,7 @@ function RoleBadge({ role, customRoleName }: { role: string; customRoleName: str
 }
 
 function TeamRowActions({ member }: { member: TeamMember }) {
+  const router = useRouter()
   const deactivate = useDeactivateTeamMember()
   const reactivate = useReactivateTeamMember()
 
@@ -60,83 +64,118 @@ function TeamRowActions({ member }: { member: TeamMember }) {
     await reactivate.mutateAsync(member.id)
   }, [reactivate, member.id])
 
+  const isAdmin = member.role === 'admin'
+
   return (
     <div className="flex items-center gap-1">
-      {member.is_active ? (
-        <ConfirmDialog
-          title="Deactivate Team Member"
-          description={`Deactivate ${member.full_name}? This will revoke their access immediately.`}
-          onConfirm={handleDeactivate}
-          isPending={deactivate.isPending}
-          variant="destructive"
-        >
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-            <UserX className="h-4 w-4" />
-            <span className="sr-only">Deactivate</span>
-          </Button>
-        </ConfirmDialog>
-      ) : (
-        <ConfirmDialog
-          title="Reactivate Team Member"
-          description={`Reactivate ${member.full_name}? They will regain access to the platform.`}
-          onConfirm={handleReactivate}
-          isPending={reactivate.isPending}
-        >
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:text-green-600">
-            <UserCheck className="h-4 w-4" />
-            <span className="sr-only">Reactivate</span>
-          </Button>
-        </ConfirmDialog>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        onClick={() => router.push(`/branch-manager/team/${member.id}`)}
+      >
+        <Pencil className="h-4 w-4" />
+        <span className="sr-only">Edit</span>
+      </Button>
+      {!isAdmin && (
+        member.is_active ? (
+          <ConfirmDialog
+            title="Deactivate Team Member"
+            description={`Deactivate ${member.full_name}? This will revoke their access immediately.`}
+            onConfirm={handleDeactivate}
+            isPending={deactivate.isPending}
+            variant="destructive"
+          >
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+              <UserX className="h-4 w-4" />
+              <span className="sr-only">Deactivate</span>
+            </Button>
+          </ConfirmDialog>
+        ) : (
+          <ConfirmDialog
+            title="Reactivate Team Member"
+            description={`Reactivate ${member.full_name}? They will regain access to the platform.`}
+            onConfirm={handleReactivate}
+            isPending={reactivate.isPending}
+          >
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:text-green-600">
+              <UserCheck className="h-4 w-4" />
+              <span className="sr-only">Reactivate</span>
+            </Button>
+          </ConfirmDialog>
+        )
       )}
     </div>
   )
 }
 
-const columns: ColumnDef<TeamMember>[] = [
-  {
-    id: 'member',
-    header: 'Member',
-    cell: ({ row }) => {
-      const m = row.original
-      const initials = m.full_name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
-      return (
-        <div className="flex items-center gap-3">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-          </Avatar>
-          <div>
-            <p className="font-medium text-sm">{m.full_name}</p>
-            {m.phone && <p className="text-xs text-muted-foreground">{m.phone}</p>}
+function getColumns(branchMap: Record<string, string>): ColumnDef<TeamMember>[] {
+  const hasBranches = Object.keys(branchMap).length > 0
+  const cols: ColumnDef<TeamMember>[] = [
+    {
+      id: 'member',
+      header: 'Member',
+      cell: ({ row }) => {
+        const m = row.original
+        const initials = m.full_name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+        return (
+          <div className="flex items-center gap-3">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="font-medium text-sm">{m.full_name}</p>
+              {m.phone && <p className="text-xs text-muted-foreground">{m.phone}</p>}
+            </div>
           </div>
-        </div>
-      )
+        )
+      },
     },
-  },
-  {
-    id: 'role',
-    header: 'Role',
-    cell: ({ row }) => <RoleBadge role={row.original.role} customRoleName={row.original.custom_role_name} />,
-  },
-  {
-    id: 'status',
-    header: 'Status',
-    cell: ({ row }) => <StatusBadge status={row.original.is_active ? 'active' : 'inactive'} />,
-  },
-  {
-    id: 'date_added',
-    header: 'Date Added',
-    cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {format(new Date(row.original.created_at), 'dd MMM yyyy')}
-      </span>
-    ),
-  },
-  {
-    id: 'actions',
-    header: '',
-    cell: ({ row }) => <TeamRowActions member={row.original} />,
-  },
-]
+    {
+      id: 'role',
+      header: 'Role',
+      cell: ({ row }) => <RoleBadge role={row.original.role} customRoleName={row.original.custom_role_name} />,
+    },
+  ]
+
+  if (hasBranches) {
+    cols.push({
+      id: 'home_branch',
+      header: 'Home Branch',
+      cell: ({ row }) => {
+        const m = row.original
+        const branchId = m.branch_id ?? m.home_branch_id
+        const name = branchId ? branchMap[branchId] : null
+        return name
+          ? <Badge variant="outline" className="text-xs font-normal">{name}</Badge>
+          : <span className="text-muted-foreground text-xs">—</span>
+      },
+    })
+  }
+
+  cols.push(
+    {
+      id: 'status',
+      header: 'Status',
+      cell: ({ row }) => <StatusBadge status={row.original.is_active ? 'active' : 'inactive'} />,
+    },
+    {
+      id: 'date_added',
+      header: 'Date Added',
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {format(new Date(row.original.created_at), 'dd MMM yyyy')}
+        </span>
+      ),
+    },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => <TeamRowActions member={row.original} />,
+    }
+  )
+  return cols
+}
 
 function TeamTableSkeleton() {
   return (
@@ -159,6 +198,15 @@ export default function BranchManagerTeamPage() {
   const [statusFilter, setStatusFilter] = useState('all')
 
   const debouncedSearch = useDebounce(search, 300)
+  const { data: branchData } = useBranchList()
+  const branches = branchData?.data ?? []
+
+  const branchMap = useMemo(
+    () => Object.fromEntries(branches.map((b) => [b.id, b.name])),
+    [branches]
+  )
+  const columns = useMemo(() => getColumns(branchMap), [branchMap])
+
   const isActiveFilter = statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined
 
   const { data, isLoading, isError } = useTeamMembers(undefined, {

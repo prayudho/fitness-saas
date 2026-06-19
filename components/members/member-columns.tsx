@@ -30,6 +30,7 @@ export type MemberRow = {
   id: string
   full_name: string | null
   phone: string | null
+  home_branch_id: string | null
   created_at: string
   memberships: MembershipSummary[]
 }
@@ -38,10 +39,14 @@ interface MemberColumnHandlers {
   onEdit: (id: string) => void
   onFreeze: (m: MemberRow) => void
   onCancel: (m: MemberRow) => void
+  branchMap?: Record<string, string>
 }
 
 export function getMemberColumns(handlers: MemberColumnHandlers): ColumnDef<MemberRow>[] {
-  return [
+  const branchMap = handlers.branchMap ?? {}
+  const hasBranches = Object.keys(branchMap).length > 0
+
+  const baseCols: ColumnDef<MemberRow>[] = [
     {
       id: 'member',
       header: 'Member',
@@ -204,4 +209,22 @@ export function getMemberColumns(handlers: MemberColumnHandlers): ColumnDef<Memb
       },
     },
   ]
+
+  if (hasBranches) {
+    const branchCol: ColumnDef<MemberRow> = {
+      id: 'home_branch',
+      header: 'Home Branch',
+      cell: ({ row }) => {
+        const id = row.original.home_branch_id
+        const name = id ? branchMap[id] : null
+        return name
+          ? <Badge variant="outline" className="text-xs font-normal">{name}</Badge>
+          : <span className="text-muted-foreground text-xs">—</span>
+      },
+    }
+    // Insert before the 'actions' column
+    baseCols.splice(baseCols.length - 1, 0, branchCol)
+  }
+
+  return baseCols
 }

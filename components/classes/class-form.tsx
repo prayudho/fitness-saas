@@ -8,6 +8,7 @@ import { format } from 'date-fns'
 import { CalendarIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useCreateClass, useClassTypes } from '@/lib/hooks/use-classes'
+import { useBranchList } from '@/lib/hooks/use-branches'
 import {
   Form,
   FormControl,
@@ -33,6 +34,7 @@ import type { ClassInput } from '@/lib/actions/classes'
 const schema = z.object({
   class_type_id: z.string().min(1, 'Class type is required'),
   instructor_id: z.string().optional(),
+  branch_id: z.string().optional(),
   room: z.string().optional(),
   capacity: z.coerce.number().int().min(1, 'Capacity must be at least 1'),
   duration_minutes: z.coerce.number().int().min(1, 'Duration is required'),
@@ -68,10 +70,12 @@ function utcToLocalDatetimeString(isoString: string): string {
 
 export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
   const { data: classTypes, isLoading: loadingTypes } = useClassTypes()
+  const { data: branchData } = useBranchList()
   const [instructors, setInstructors] = useState<Instructor[]>([])
   const [loadingInstructors, setLoadingInstructors] = useState(false)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const createClass = useCreateClass()
+  const branches = branchData?.data ?? []
 
   // Separate time state so the user can set the time before picking a date
   const [timeValue, setTimeValue] = useState<string>(() => {
@@ -87,6 +91,7 @@ export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
     defaultValues: {
       class_type_id: defaultValues?.class_type_id ?? '',
       instructor_id: defaultValues?.instructor_id ?? undefined,
+      branch_id: defaultValues?.branch_id ?? undefined,
       room: defaultValues?.room ?? '',
       capacity: defaultValues?.capacity ?? 20,
       duration_minutes: defaultValues?.duration_minutes ?? 60,
@@ -149,6 +154,7 @@ export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
     const input: ClassInput = {
       class_type_id: data.class_type_id,
       instructor_id: data.instructor_id && data.instructor_id !== 'none' ? data.instructor_id : null,
+      branch_id: data.branch_id && data.branch_id !== 'none' ? data.branch_id : null,
       room: data.room || null,
       capacity: data.capacity,
       duration_minutes: data.duration_minutes,
@@ -227,6 +233,38 @@ export function ClassForm({ onSuccess, defaultValues }: ClassFormProps) {
             </FormItem>
           )}
         />
+
+        {/* Branch (shown only when branches exist) */}
+        {branches.length > 0 && (
+          <FormField
+            control={form.control}
+            name="branch_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Branch (optional)</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value ?? ''}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All branches / no specific branch" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="none">All branches</SelectItem>
+                    {branches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         {/* Room + Capacity */}
         <div className="grid grid-cols-2 gap-4">
