@@ -24,6 +24,7 @@ export type ClassInput = {
   capacity: number
   duration_minutes: number
   scheduled_at: string
+  branch_id?: string | null
 }
 
 export type ClassWithDetails = ClassRow & {
@@ -340,10 +341,26 @@ export async function createClass(
     if (!profile.brand_id) return { error: 'No brand context' }
     const brandId = profile.brand_id
 
+    // Resolve branch_id: use provided value or fall back to the brand's first branch
+    let branchId = input.branch_id ?? null
+    if (!branchId) {
+      const { data: firstBranch } = await supabase
+        .from('branches' as never)
+        .select('id')
+        .eq('brand_id', brandId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .single()
+      branchId = firstBranch ? (firstBranch as { id: string }).id : null
+    }
+    if (!branchId) return { error: 'No branch found for this brand. Please create a branch first.' }
+
     const { data: rawData, error } = await supabase
       .from('classes')
       .insert({
         brand_id: brandId,
+        branch_id: branchId,
         class_type_id: input.class_type_id,
         instructor_id: input.instructor_id ?? null,
         room: input.room ?? null,

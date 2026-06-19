@@ -448,12 +448,13 @@ export async function registerMemberByAdmin(input: RegisterMemberInput): Promise
       return { data: null, error: profileError.message }
     }
   } else {
-    // New user: trigger created a profile with brand_id from app_metadata; UPDATE extras
+    // New user: trigger created a profile; UPDATE with correct fields.
+    // NOTE: Do NOT filter by brand_id — GoTrue fires the DB trigger before
+    // raw_app_meta_data is populated, so the profile may have brand_id=NULL.
     const { error: profileError } = await supabase
       .from('profiles')
       .update({ ...profileFields, ...homeBranchPatch } as never)
       .eq('id', authUserId)
-      .eq('brand_id', validated.brandId)
 
     if (profileError) {
       await supabase.auth.admin.deleteUser(authUserId)

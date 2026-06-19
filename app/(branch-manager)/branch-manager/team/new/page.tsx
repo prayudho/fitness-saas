@@ -10,8 +10,9 @@ import { ArrowLeft, Loader2, Eye, EyeOff, Info } from 'lucide-react'
 
 import { inviteTeamMemberSchema, type InviteTeamMemberInput } from '@/lib/validations/team'
 import { useRole } from '@/lib/hooks/use-role'
-import { useBranchList } from '@/lib/hooks/use-branches'
 import { inviteTeamMember } from '@/lib/actions/team.actions'
+import { getCurrentBranchId } from '@/lib/actions/branches.actions'
+import { useQuery } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,7 +39,12 @@ export default function BranchManagerNewTeamMemberPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isPending, setIsPending] = useState(false)
 
-  const { data: branchData } = useBranchList()
+  // Branch managers always assign team members to their own branch
+  const { data: branchCtx } = useQuery({
+    queryKey: ['branch-context'],
+    queryFn: () => getCurrentBranchId(),
+    staleTime: Infinity,
+  })
 
   const form = useForm<InviteTeamMemberInput>({
     resolver: zodResolver(inviteTeamMemberSchema),
@@ -58,12 +64,17 @@ export default function BranchManagerNewTeamMemberPage() {
     if (brandId) form.setValue('brandId', brandId)
   }, [brandId, form])
 
-  const watchedRole = useWatch({ control: form.control, name: 'role' })
+  // Auto-set the branch manager's branch on the form
+  useEffect(() => {
+    if (branchCtx?.branchId) {
+      form.setValue('branchId', branchCtx.branchId)
+    }
+  }, [branchCtx, form])
+
   const watchedEmail = useWatch({ control: form.control, name: 'email' })
 
-  const isMultiBranch = branchData?.isMultiBranch ?? false
-  const branches = branchData?.data ?? []
-  const showBranchSelect = isMultiBranch && ['staff', 'trainer'].includes(watchedRole)
+  // Branch managers always assign to their own branch — never show the selector
+  const showBranchSelect = false
 
   async function onSubmit(data: InviteTeamMemberInput) {
     if (!brandId) {
@@ -163,8 +174,9 @@ export default function BranchManagerNewTeamMemberPage() {
                     <Select
                       onValueChange={(val) => {
                         field.onChange(val)
-                        if (!['staff', 'trainer'].includes(val)) {
-                          form.setValue('branchId', undefined)
+                        // Always keep the branch manager's branchId set regardless of role
+                        if (branchCtx?.branchId) {
+                          form.setValue('branchId', branchCtx.branchId)
                         }
                       }}
                       defaultValue={field.value}

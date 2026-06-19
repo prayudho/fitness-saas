@@ -61,6 +61,7 @@ export default function LoginForm({ brandName, brandLogo, brandColor }: LoginFor
         admin: '/admin/dashboard',
         staff: '/staff/checkin',
         trainer: '/trainer/schedule',
+        branch_manager: '/branch-manager',
         member: '/member',
       }
 

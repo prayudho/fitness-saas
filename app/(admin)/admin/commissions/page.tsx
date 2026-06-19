@@ -87,7 +87,7 @@ export default function CommissionsPage() {
   const {
     data: sessionCommissions = [],
     isLoading: sessionLoading,
-    refetch: refetchSessions,
+    isError: sessionError,
   } = useQuery({
     queryKey: ['commissions', 'session', branchFilter],
     queryFn: async () => {
@@ -100,7 +100,7 @@ export default function CommissionsPage() {
   const {
     data: salesCommissions = [],
     isLoading: salesLoading,
-    refetch: refetchSales,
+    isError: salesError,
   } = useQuery({
     queryKey: ['commissions', 'sales', branchFilter],
     queryFn: async () => {
@@ -300,6 +300,12 @@ export default function CommissionsPage() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+      )}
+
+      {(sessionError || salesError) && (
+        <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Failed to load commissions. Please refresh the page or contact support if the issue persists.
         </div>
       )}
 

@@ -50,18 +50,21 @@ function WorkoutLogCard({ log }: { log: WorkoutLogWithDetails }) {
         </div>
       </div>
 
-      <div className="space-y-1">
+      <div className="space-y-2">
         {exercises.map((ex, i) => (
-          <div key={i} className="flex items-center justify-between text-xs gap-2">
-            <span className="truncate text-sm">{ex.name}</span>
-            <div className="flex items-center gap-1.5 shrink-0">
+          <div key={i} className="text-xs">
+            <div className="flex items-center justify-between gap-2 mb-0.5">
+              <span className="truncate text-sm font-medium">{ex.name}</span>
               {ex.muscle_groups.slice(0, 1).map((m) => (
-                <Badge key={m} variant="secondary" className="text-xs px-1.5 py-0">{m}</Badge>
+                <Badge key={m} variant="secondary" className="text-xs px-1.5 py-0 shrink-0">{m}</Badge>
               ))}
-              <span className="text-muted-foreground">
-                {ex.sets.length}×{ex.sets[0]?.reps ?? 0}
-                {ex.sets[0]?.weight ? ` @ ${ex.sets[0].weight}kg` : ''}
-              </span>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground pl-1">
+              {ex.sets.map((set, si) => (
+                <span key={si}>
+                  Set {si + 1}: {set.reps} reps{set.weight ? ` @ ${set.weight}kg` : ''}
+                </span>
+              ))}
             </div>
           </div>
         ))}
@@ -75,7 +78,7 @@ function WorkoutLogCard({ log }: { log: WorkoutLogWithDetails }) {
 }
 
 export function MemberWorkoutHistory({ memberId }: MemberWorkoutHistoryProps) {
-  const { data: logs = [], isLoading } = useMemberWorkoutHistory(memberId)
+  const { data: logs = [], isLoading, isError } = useMemberWorkoutHistory(memberId)
 
   return (
     <Card>
@@ -88,6 +91,10 @@ export function MemberWorkoutHistory({ memberId }: MemberWorkoutHistoryProps) {
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-24 w-full" />
             ))}
+          </div>
+        ) : isError ? (
+          <div className="py-8 text-center">
+            <p className="text-sm text-muted-foreground">Failed to load workout history.</p>
           </div>
         ) : logs.length === 0 ? (
           <div className="py-8 text-center">
