@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getAuthedProfile } from '@/lib/actions/utils'
 import { activateMembershipForInvoice } from '@/lib/billing/shared'
@@ -476,13 +476,15 @@ export async function cancelPendingPackage(
   invoiceId: string
 ): Promise<{ error?: string }> {
   try {
-    const supabase = createClient()
-    const { profile } = await getAuthedProfile(supabase)
+    const supabase = createServiceClient()
+    const authClient = createClient()
+    const { profile } = await getAuthedProfile(authClient)
     if (!profile.brand_id) return { error: 'No brand context' }
     const brandId = profile.brand_id
 
-    // M9: cancelling a package assignment is admin-only
-    if (profile.role !== 'admin') return { error: 'Admin access required to cancel packages' }
+    if (profile.role !== 'admin' && profile.role !== 'branch_manager') {
+      return { error: 'Access denied' }
+    }
 
     const { data: invRaw } = await supabase
       .from('invoices')
@@ -495,17 +497,8 @@ export async function cancelPendingPackage(
     const inv = invRaw as { id: string; status: string; membership_id: string | null }
     if (inv.status !== 'pending') return { error: 'Only pending invoices can be cancelled' }
 
-    // H4: soft-delete — mark cancelled instead of deleting rows (preserves audit trail)
-    const { error: invErr } = await supabase
-      .from('invoices')
-      .update({ status: 'cancelled' } as never)
-      .eq('id', invoiceId)
-      .eq('brand_id', brandId)
-
-    if (invErr) return { error: invErr.message }
-
     if (inv.membership_id) {
-      const memId = inv.membership_id  // narrow to string for Supabase TS
+      const memId = inv.membership_id
       const { data: memRaw } = await supabase
         .from('memberships')
         .select('id, status')
@@ -516,24 +509,49 @@ export async function cancelPendingPackage(
       const mem = memRaw as { id: string; status: string } | null
 
       if (mem && mem.status === 'pending_payment') {
-        // Cancel the membership and any other pending invoices linked to it
-        await supabase
+        // Hard-delete all pending invoices linked to this membership
+        const { error: invErr } = await supabase
           .from('invoices')
-          .update({ status: 'cancelled' } as never)
+          .delete()
           .eq('membership_id', mem.id)
           .eq('brand_id', brandId)
           .eq('status', 'pending')
 
-        await supabase
+        if (invErr) return { error: invErr.message }
+
+        // Hard-delete the membership
+        const { error: memErr } = await supabase
           .from('memberships')
-          .update({ status: 'cancelled' } as never)
+          .delete()
           .eq('id', mem.id)
           .eq('brand_id', brandId)
+
+        if (memErr) return { error: memErr.message }
+      } else {
+        // Membership is active/paid — only delete this specific invoice
+        const { error: invErr } = await supabase
+          .from('invoices')
+          .delete()
+          .eq('id', invoiceId)
+          .eq('brand_id', brandId)
+
+        if (invErr) return { error: invErr.message }
       }
+    } else {
+      // No linked membership — just delete the invoice
+      const { error: invErr } = await supabase
+        .from('invoices')
+        .delete()
+        .eq('id', invoiceId)
+        .eq('brand_id', brandId)
+
+      if (invErr) return { error: invErr.message }
     }
 
     revalidatePath('/admin/billing')
     revalidatePath('/admin/members')
+    revalidatePath('/branch-manager/billing')
+    revalidatePath('/branch-manager/members')
     return {}
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'An error occurred' }

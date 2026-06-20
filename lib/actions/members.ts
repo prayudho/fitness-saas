@@ -260,8 +260,9 @@ export async function unfreezeMembership(membershipId: string): Promise<{ error?
 
 export async function cancelMembership(membershipId: string): Promise<{ error?: string }> {
   try {
-    const supabase = createClient()
-    const { profile } = await getAuthedProfile(supabase)
+    const supabase = createServiceClient()
+    const authClient = createClient()
+    const { profile } = await getAuthedProfile(authClient)
     if (!profile.brand_id) return { error: 'No brand context' }
     const brandId = profile.brand_id
 
@@ -299,6 +300,8 @@ export async function cancelMembership(membershipId: string): Promise<{ error?: 
 
     revalidatePath('/admin/members')
     revalidatePath('/admin/billing')
+    revalidatePath('/branch-manager/members')
+    revalidatePath('/branch-manager/billing')
     return {}
   } catch (e) {
     return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
