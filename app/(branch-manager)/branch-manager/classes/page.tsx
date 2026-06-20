@@ -1,9 +1,18 @@
 'use client'
 
 import { useState } from 'react'
+import { Plus } from 'lucide-react'
 import { PageHeader } from '@/components/shared/page-header'
 import { WeekScheduleGrid } from '@/components/classes/week-schedule-grid'
 import { ClassDetailSheet } from '@/components/classes/class-detail-sheet'
+import { ClassForm } from '@/components/classes/class-form'
+import { Button } from '@/components/ui/button'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { useClasses } from '@/lib/hooks/use-classes'
 
 function getMonday(date: Date): Date {
@@ -19,6 +28,7 @@ export default function BranchManagerClassesPage() {
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()))
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [isAddClassOpen, setIsAddClassOpen] = useState(false)
 
   const { data: classes = [], isLoading } = useClasses({
     weekStart: weekStart.toISOString(),
@@ -28,7 +38,13 @@ export default function BranchManagerClassesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Class Schedule"
-        description="View group fitness classes at your branch"
+        description="Manage group fitness classes at your branch"
+        action={
+          <Button size="sm" onClick={() => setIsAddClassOpen(true)}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            Add Class
+          </Button>
+        }
       />
 
       {isLoading ? (
@@ -51,6 +67,17 @@ export default function BranchManagerClassesPage() {
         onClose={() => { setIsDetailOpen(false); setSelectedClassId(null) }}
         isAdmin={true}
       />
+
+      <Sheet open={isAddClassOpen} onOpenChange={setIsAddClassOpen}>
+        <SheetContent className="sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Schedule New Class</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6">
+            <ClassForm onSuccess={() => setIsAddClassOpen(false)} />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
