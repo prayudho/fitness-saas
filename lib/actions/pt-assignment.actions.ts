@@ -538,9 +538,9 @@ export async function listCommissions(
       .eq('brand_id', profile.brand_id)
       .order('created_at', { ascending: false })
 
-    if (filters?.type)     query = query.eq('payout_type', filters.type)
-    if (filters?.status)   query = query.eq('status', filters.status)
-    if (filters?.branchId) query = query.eq('branch_id', filters.branchId)
+    if (filters?.type)   query = query.eq('payout_type', filters.type)
+    if (filters?.status) query = query.eq('status', filters.status)
+    // branch_id does not exist on pt_commission_payouts; data is already brand-scoped above
 
     const { data: payouts, error } = await query
     if (error) throw error
@@ -690,7 +690,7 @@ export async function editCommissionSalesPIC(
     const supabase = createClient()
     const { profile } = await getAuthedProfile(supabase)
     if (!profile.brand_id) return { error: 'No brand context' }
-    if (profile.role !== 'admin') return { error: 'Only admins can edit commissions' }
+    if (profile.role !== 'admin' && profile.role !== 'branch_manager') return { error: 'Only admins can edit commissions' }
 
     // Verify the commission is pending and is a sales type
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

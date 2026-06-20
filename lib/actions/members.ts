@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getAuthedProfile } from '@/lib/actions/utils'
 import type { Database } from '@/types/database'
@@ -315,8 +315,9 @@ export async function assignPackage(input: {
   error?: string
 }> {
   try {
-    const supabase = createClient()
-    const { profile } = await getAuthedProfile(supabase)
+    const supabase = createServiceClient()
+    const authClient = createClient()
+    const { profile } = await getAuthedProfile(authClient)
     if (!profile.brand_id) return { error: 'No brand context' }
     const brandId = profile.brand_id
 
