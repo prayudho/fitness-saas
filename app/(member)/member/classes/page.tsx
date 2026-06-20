@@ -130,14 +130,14 @@ export default function MemberClassesPage() {
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()))
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
-  const [selectedBranchId, setSelectedBranchId] = useState<string>('')
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('all')
 
   const { data: branchData } = useBranchList()
   const isMultiBranch = branchData?.isMultiBranch ?? false
 
   const { data: classes = [], isLoading: loadingClasses } = useClasses({
     weekStart: weekStart.toISOString(),
-    branchId: selectedBranchId || undefined,
+    branchId: selectedBranchId !== 'all' ? selectedBranchId : undefined,
   })
   const { data: bookings = [], isLoading: loadingBookings } = useMemberBookings()
 
@@ -172,7 +172,7 @@ export default function MemberClassesPage() {
               <SelectValue placeholder="All branches" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All branches</SelectItem>
+              <SelectItem value="all">All branches</SelectItem>
               {(branchData?.data ?? []).map((b) => (
                 <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
               ))}

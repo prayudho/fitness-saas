@@ -50,7 +50,7 @@ export default function CommissionsPage() {
   const [editingPayout, setEditingPayout]     = useState<CommissionListItem | null>(null)
   const [newSalesPersonId, setNewSalesPersonId] = useState('')
   const [salesPeople, setSalesPeople] = useState<{ id: string; name: string }[]>([])
-  const [selectedBranchId, setSelectedBranchId] = useState<string>('')
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('all')
 
   const { data: branchData } = useBranchList()
   const isMultiBranch = branchData?.isMultiBranch ?? false
@@ -82,7 +82,7 @@ export default function CommissionsPage() {
   }, [])
 
   // ── Queries ────────────────────────────────────────────────────────────────
-  const branchFilter = selectedBranchId || undefined
+  const branchFilter = selectedBranchId !== 'all' ? selectedBranchId : undefined
 
   const {
     data: sessionCommissions = [],
@@ -294,7 +294,7 @@ export default function CommissionsPage() {
               <SelectValue placeholder="All branches" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All branches</SelectItem>
+              <SelectItem value="all">All branches</SelectItem>
               {(branchData?.data ?? []).map((b) => (
                 <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
               ))}
