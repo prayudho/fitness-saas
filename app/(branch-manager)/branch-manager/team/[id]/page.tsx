@@ -247,6 +247,7 @@ export default function BranchManagerTeamMemberDetailPage() {
                         <FormItem>
                           <FormLabel>Role</FormLabel>
                           <Select
+                            key={field.value ?? 'role-empty'}
                             onValueChange={(val) => {
                               field.onChange(val)
                               if (val !== 'support') form.setValue('customRoleId', undefined)

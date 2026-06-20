@@ -254,6 +254,7 @@ export default function TeamMemberDetailPage() {
                       <FormItem>
                         <FormLabel>Role</FormLabel>
                         <Select
+                          key={field.value ?? 'role-empty'}
                           onValueChange={(val) => {
                             field.onChange(val)
                             if (val !== 'support') form.setValue('customRoleId', undefined)
@@ -320,7 +321,7 @@ export default function TeamMemberDetailPage() {
                               <span className="text-muted-foreground font-normal"> (optional)</span>
                             )}
                           </FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                          <Select key={field.value ?? 'branch-empty'} onValueChange={field.onChange} value={field.value ?? ''}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select branch" />
