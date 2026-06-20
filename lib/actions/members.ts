@@ -395,11 +395,21 @@ export async function assignPackage(input: {
       promoCodeId = promo.id
     }
 
+    // Resolve the member's home branch so invoices and memberships are visible to their BM
+    const { data: rawMemberProfile } = await supabase
+      .from('profiles')
+      .select('home_branch_id')
+      .eq('id', input.member_id)
+      .eq('brand_id', brandId)
+      .single()
+    const memberBranchId = (rawMemberProfile as { home_branch_id: string | null } | null)?.home_branch_id ?? null
+
     // ── Normal flow: create a new membership ─────────────────────────────────
     const { data: rawMembership, error: membershipError } = await supabase
       .from('memberships')
       .insert({
         brand_id:              brandId,
+        branch_id:             memberBranchId,
         member_id:             input.member_id,
         package_id:            input.package_id,
         status:                'pending_payment',
@@ -424,13 +434,14 @@ export async function assignPackage(input: {
     const { data: rawInvoice, error: invoiceError } = await supabase
       .from('invoices')
       .insert({
-        brand_id: brandId,
-        member_id: input.member_id,
+        brand_id:      brandId,
+        branch_id:     memberBranchId,
+        member_id:     input.member_id,
         membership_id: membership.id,
-        amount: finalAmount,
-        currency: pkg.currency,
-        status: 'pending',
-        notes: promoCodeId ? `Promo code applied` : null,
+        amount:        finalAmount,
+        currency:      pkg.currency,
+        status:        'pending',
+        notes:         promoCodeId ? `Promo code applied` : null,
       } as never)
       .select()
       .single()

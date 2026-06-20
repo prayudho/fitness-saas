@@ -145,8 +145,9 @@ export async function createInvoice(input: {
   notes?: string
 }): Promise<{ data?: InvoiceRow; error?: string }> {
   try {
-    const supabase = createClient()
-    const { profile } = await getAuthedProfile(supabase)
+    const supabase = createServiceClient()
+    const authClient = createClient()
+    const { profile } = await getAuthedProfile(authClient)
     if (!profile.brand_id) return { error: 'No brand context' }
     const brandId = profile.brand_id
 
@@ -165,10 +166,20 @@ export async function createInvoice(input: {
       }
     }
 
+    // Resolve the member's home branch so the invoice is visible to their BM
+    const { data: rawMemberProfile } = await supabase
+      .from('profiles')
+      .select('home_branch_id')
+      .eq('id', input.member_id)
+      .eq('brand_id', brandId)
+      .single()
+    const memberBranchId = (rawMemberProfile as { home_branch_id: string | null } | null)?.home_branch_id ?? null
+
     const { data, error } = await supabase
       .from('invoices')
       .insert({
         brand_id:      brandId,
+        branch_id:     memberBranchId,
         member_id:     input.member_id,
         membership_id: input.membership_id ?? null,
         amount:        input.amount,
@@ -182,6 +193,7 @@ export async function createInvoice(input: {
     if (error) return { error: error.message }
 
     revalidatePath('/admin/billing')
+    revalidatePath('/branch-manager/billing')
     return { data: data ?? undefined }
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'An error occurred' }
