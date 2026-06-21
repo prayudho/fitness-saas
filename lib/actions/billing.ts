@@ -211,10 +211,14 @@ export async function recordPayment(
   }
 ): Promise<{ error?: string }> {
   try {
-    const supabase = createClient()
-    const { profile } = await getAuthedProfile(supabase)
+    const authClient = createClient()
+    const { profile } = await getAuthedProfile(authClient)
     if (!profile.brand_id) return { error: 'No brand context' }
     const brandId = profile.brand_id
+
+    // Use service client for writes so branch_manager role isn't blocked by
+    // invoices_write RLS policy (which only covers admin/staff).
+    const supabase = createServiceClient()
 
     const { data: invoiceRaw, error: fetchErr } = await supabase
       .from('invoices')
@@ -255,6 +259,7 @@ export async function recordPayment(
     }
 
     revalidatePath('/admin/billing')
+    revalidatePath('/branch-manager/billing')
     revalidatePath('/admin/members')
     revalidatePath('/member/billing')
     return {}
