@@ -1,7 +1,7 @@
 'use client'
 
 import { formatDate } from '@/lib/utils'
-import { useClass, useCancelClass, useCheckInAttendee } from '@/lib/hooks/use-classes'
+import { useClass, useCancelClass, useDeleteClass, useCheckInAttendee } from '@/lib/hooks/use-classes'
 import {
   Sheet,
   SheetContent,
@@ -32,6 +32,7 @@ export function ClassDetailSheet({
 }: ClassDetailSheetProps) {
   const { data: cls, isLoading } = useClass(classId)
   const cancelClass = useCancelClass()
+  const deleteClass = useDeleteClass()
   const checkIn = useCheckInAttendee()
 
   const bookedCount =
@@ -41,6 +42,12 @@ export function ClassDetailSheet({
   async function handleCancelClass() {
     if (!classId) return
     await cancelClass.mutateAsync(classId)
+    onClose()
+  }
+
+  async function handleDeleteClass() {
+    if (!classId) return
+    await deleteClass.mutateAsync(classId)
     onClose()
   }
 
@@ -152,18 +159,31 @@ export function ClassDetailSheet({
             </div>
 
             {/* Admin actions */}
-            {isAdmin && cls.status !== 'cancelled' && (
+            {isAdmin && (
               <>
                 <Separator />
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  {cls.status !== 'cancelled' && (
+                    <ConfirmDialog
+                      title="Cancel Class"
+                      description="Are you sure you want to cancel this class? All bookings will remain but members will be notified."
+                      onConfirm={handleCancelClass}
+                      isPending={cancelClass.isPending}
+                    >
+                      <Button variant="outline" size="sm">
+                        Cancel Class
+                      </Button>
+                    </ConfirmDialog>
+                  )}
                   <ConfirmDialog
-                    title="Cancel Class"
-                    description="Are you sure you want to cancel this class? All bookings will remain but members will be notified."
-                    onConfirm={handleCancelClass}
-                    isPending={cancelClass.isPending}
+                    title="Delete Class"
+                    description="Permanently delete this class and all its bookings? This cannot be undone."
+                    onConfirm={handleDeleteClass}
+                    isPending={deleteClass.isPending}
+                    variant="destructive"
                   >
                     <Button variant="destructive" size="sm">
-                      Cancel Class
+                      Delete Class
                     </Button>
                   </ConfirmDialog>
                 </div>

@@ -422,6 +422,7 @@ export async function getTeamMembers(
     role?: string
     isActive?: boolean
     page?: number
+    branchId?: string
   }
 ): Promise<{ data: TeamMember[]; total: number; error: string | null }> {
   // When brandId is not supplied, derive it from the authenticated user's profile
@@ -466,6 +467,10 @@ export async function getTeamMembers(
     .neq('role', 'member')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
+
+  if (opts?.branchId) {
+    query = query.eq('home_branch_id', opts.branchId)
+  }
 
   if (opts?.search) {
     query = query.or(

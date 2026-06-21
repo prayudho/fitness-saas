@@ -1,13 +1,34 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
+import { UserPlus, Eye } from 'lucide-react'
 import { PageHeader } from '@/components/shared/page-header'
 import { DataTable } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useTrainers } from '@/lib/hooks/use-trainers'
+import { getCurrentBranchId } from '@/lib/actions/branches.actions'
 import type { TrainerWithProfile } from '@/lib/actions/trainers'
+
+function TrainerActions({ trainer }: { trainer: TrainerWithProfile }) {
+  const router = useRouter()
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8"
+      onClick={() => router.push(`/branch-manager/trainers/${trainer.id}`)}
+    >
+      <Eye className="h-4 w-4" />
+      <span className="sr-only">View</span>
+    </Button>
+  )
+}
 
 const columns: ColumnDef<TrainerWithProfile>[] = [
   {
@@ -61,16 +82,36 @@ const columns: ColumnDef<TrainerWithProfile>[] = [
     header: 'Status',
     cell: ({ row }) => <StatusBadge status={row.original.is_active ? 'active' : 'inactive'} />,
   },
+  {
+    id: 'actions',
+    header: '',
+    cell: ({ row }) => <TrainerActions trainer={row.original} />,
+  },
 ]
 
 export default function BranchManagerTrainersPage() {
-  const { data: trainers, isLoading } = useTrainers()
+  const { data: branchCtx } = useQuery({
+    queryKey: ['branch-context'],
+    queryFn: () => getCurrentBranchId(),
+    staleTime: Infinity,
+  })
+  const branchId = branchCtx?.branchId ?? undefined
+
+  const { data: trainers, isLoading } = useTrainers(branchId ? { branchId } : undefined)
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Trainers"
-        description="Personal trainers at your branch (read-only)"
+        description="Personal trainers at your branch"
+        action={
+          <Button asChild>
+            <Link href="/branch-manager/trainers/new">
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add Trainer
+            </Link>
+          </Button>
+        }
       />
       <DataTable
         data={trainers ?? []}

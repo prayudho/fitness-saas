@@ -32,6 +32,8 @@ import {
   type TeamMember,
 } from '@/lib/hooks/use-team'
 import { useBranchList } from '@/lib/hooks/use-branches'
+import { useQuery } from '@tanstack/react-query'
+import { getCurrentBranchId } from '@/lib/actions/branches.actions'
 
 function getRoleBadgeClass(role: string): string {
   switch (role) {
@@ -201,6 +203,13 @@ export default function BranchManagerTeamPage() {
   const { data: branchData } = useBranchList()
   const branches = branchData?.data ?? []
 
+  const { data: branchCtx } = useQuery({
+    queryKey: ['branch-context'],
+    queryFn: () => getCurrentBranchId(),
+    staleTime: Infinity,
+  })
+  const branchId = branchCtx?.branchId ?? undefined
+
   const branchMap = useMemo(
     () => Object.fromEntries(branches.map((b) => [b.id, b.name])),
     [branches]
@@ -213,6 +222,7 @@ export default function BranchManagerTeamPage() {
     search: debouncedSearch || undefined,
     role: roleFilter !== 'all' ? roleFilter : undefined,
     isActive: isActiveFilter,
+    branchId,
   })
 
   const members = data?.data ?? []

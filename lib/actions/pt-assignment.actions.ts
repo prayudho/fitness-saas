@@ -411,10 +411,11 @@ export async function approveCommission(
   payoutId: string
 ): Promise<{ error?: string }> {
   try {
-    const supabase = createClient()
-    const { user, profile } = await getAuthedProfile(supabase)
+    const authClient = createClient()
+    const { user, profile } = await getAuthedProfile(authClient)
     if (!profile.brand_id) return { error: 'No brand context' }
 
+    const supabase = createServiceClient()
     const { error } = await supabase
       .from('pt_commission_payouts')
       .update({
@@ -430,6 +431,7 @@ export async function approveCommission(
 
     revalidatePath('/admin/trainers')
     revalidatePath('/admin/commissions')
+    revalidatePath('/branch-manager/commissions')
     return {}
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'An error occurred' }
@@ -440,10 +442,11 @@ export async function markCommissionPaid(
   payoutId: string
 ): Promise<{ error?: string }> {
   try {
-    const supabase = createClient()
-    const { profile } = await getAuthedProfile(supabase)
+    const authClient = createClient()
+    const { profile } = await getAuthedProfile(authClient)
     if (!profile.brand_id) return { error: 'No brand context' }
 
+    const supabase = createServiceClient()
     const { error } = await supabase
       .from('pt_commission_payouts')
       .update({
@@ -457,6 +460,7 @@ export async function markCommissionPaid(
     if (error) return { error: error.message }
 
     revalidatePath('/admin/trainers')
+    revalidatePath('/branch-manager/commissions')
     return {}
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'An error occurred' }
@@ -687,10 +691,12 @@ export async function editCommissionSalesPIC(
   newSalesPersonId: string
 ): Promise<{ error?: string }> {
   try {
-    const supabase = createClient()
-    const { profile } = await getAuthedProfile(supabase)
+    const authClient = createClient()
+    const { profile } = await getAuthedProfile(authClient)
     if (!profile.brand_id) return { error: 'No brand context' }
     if (profile.role !== 'admin' && profile.role !== 'branch_manager') return { error: 'Only admins can edit commissions' }
+
+    const supabase = createServiceClient()
 
     // Verify the commission is pending and is a sales type
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -724,6 +730,7 @@ export async function editCommissionSalesPIC(
 
     if (error) throw error
     revalidatePath('/admin/commissions')
+    revalidatePath('/branch-manager/commissions')
     return {}
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'An error occurred' }

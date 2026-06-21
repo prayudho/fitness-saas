@@ -438,6 +438,40 @@ export async function cancelClass(id: string): Promise<{ error?: string }> {
   }
 }
 
+export async function deleteClass(id: string): Promise<{ error?: string }> {
+  try {
+    const authClient = createClient()
+    const { profile } = await getAuthedProfile(authClient)
+    if (!profile.brand_id) return { error: 'No brand context' }
+    const brandId = profile.brand_id
+
+    const supabase = createServiceClient()
+
+    const { error: bookingsError } = await supabase
+      .from('class_bookings')
+      .delete()
+      .eq('class_id', id)
+      .eq('brand_id', brandId)
+
+    if (bookingsError) return { error: bookingsError.message }
+
+    const { error } = await supabase
+      .from('classes')
+      .delete()
+      .eq('id', id)
+      .eq('brand_id', brandId)
+
+    if (error) return { error: error.message }
+
+    revalidatePath('/admin/classes')
+    revalidatePath('/branch-manager/classes')
+    revalidatePath('/member/classes')
+    return {}
+  } catch (e) {
+    return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
+  }
+}
+
 // ─────────────────────────────────────────────
 // BOOKINGS
 // ─────────────────────────────────────────────

@@ -31,7 +31,7 @@ export type { TeamMember, TeamMemberDetail, CustomRole }
 // ----------------------------------------------------------------
 export function useTeamMembers(
   brandId?: string,
-  filters?: { search?: string; role?: string; isActive?: boolean; page?: number }
+  filters?: { search?: string; role?: string; isActive?: boolean; page?: number; branchId?: string }
 ) {
   return useQuery({
     queryKey: ['team', 'list', brandId ?? 'auto', filters],

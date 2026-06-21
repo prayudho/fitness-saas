@@ -9,6 +9,7 @@ import {
   createClass,
   updateClass,
   cancelClass,
+  deleteClass,
   bookClass,
   cancelBooking,
   getMemberBookings,
@@ -165,6 +166,21 @@ export function useCancelClass() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['classes'] })
       toast.success('Class cancelled')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+export function useDeleteClass() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const r = await deleteClass(id)
+      if (r.error) throw new Error(r.error)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['classes'] })
+      toast.success('Class deleted')
     },
     onError: (e: Error) => toast.error(e.message),
   })
