@@ -451,7 +451,6 @@ export async function deleteClass(id: string): Promise<{ error?: string }> {
       .from('class_bookings')
       .delete()
       .eq('class_id', id)
-      .eq('brand_id', brandId)
 
     if (bookingsError) return { error: bookingsError.message }
 
