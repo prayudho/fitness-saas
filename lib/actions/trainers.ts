@@ -230,7 +230,17 @@ export async function createTrainer(input: {
       .update({ role: 'trainer' } as never)
       .eq('id', input.member_id)
 
+    // If the caller has a home branch (e.g. branch_manager), assign the new trainer to it
+    if (profile.home_branch_id) {
+      const serviceClient = createServiceClient()
+      await serviceClient
+        .from('trainer_branches' as never)
+        .insert({ trainer_id: input.member_id, branch_id: profile.home_branch_id, is_primary: true } as never)
+        .select()
+    }
+
     revalidatePath('/admin/trainers')
+    revalidatePath('/branch-manager/trainers')
     return { data: trainer }
   } catch (e) {
     return { error: e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'An error occurred' }
