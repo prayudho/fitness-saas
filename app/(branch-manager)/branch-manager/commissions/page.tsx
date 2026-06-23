@@ -81,30 +81,22 @@ export default function BranchManagerCommissionsPage() {
   }, [])
 
   const {
-    data: sessionCommissions = [],
-    isLoading: sessionLoading,
+    data: allCommissions,
+    isLoading: commissionsLoading,
   } = useQuery({
-    queryKey: ['commissions', 'session', branchId],
+    queryKey: ['commissions', 'all', branchId],
     queryFn: async () => {
-      const result = await listCommissions({ type: 'session', branchId })
+      const result = await listCommissions({ branchId })
       if (result.error) throw new Error(result.error)
       return result.data ?? []
     },
-    enabled: branchId !== undefined || branchCtx !== undefined,
+    enabled: branchCtx !== undefined,
   })
 
-  const {
-    data: salesCommissions = [],
-    isLoading: salesLoading,
-  } = useQuery({
-    queryKey: ['commissions', 'sales', branchId],
-    queryFn: async () => {
-      const result = await listCommissions({ type: 'sales', branchId })
-      if (result.error) throw new Error(result.error)
-      return result.data ?? []
-    },
-    enabled: branchId !== undefined || branchCtx !== undefined,
-  })
+  const sessionCommissions = allCommissions?.filter((c) => c.payout_type === 'session') ?? []
+  const salesCommissions   = allCommissions?.filter((c) => c.payout_type === 'sales')   ?? []
+  const sessionLoading     = commissionsLoading
+  const salesLoading       = commissionsLoading
 
   const approveMutation = useMutation({
     mutationFn: async (id: string) => {

@@ -566,87 +566,66 @@ export async function listCommissions(
 
     const rawPayouts = payouts as RawPayout[]
 
-    // Collect all IDs we need to look up
-    const profileIds = new Set<string>()
-    const sessionIds = new Set<string>()
-    const assignmentIds = new Set<string>()
+    // Collect all IDs we need in a single pass
+    const directProfileIds = new Set<string>()
+    const sessionIds       = new Set<string>()
+    const assignmentIds    = new Set<string>()
 
     for (const p of rawPayouts) {
-      if (p.trainer_id) profileIds.add(p.trainer_id)
-      if (p.sales_person_id) profileIds.add(p.sales_person_id)
+      if (p.trainer_id)        directProfileIds.add(p.trainer_id)
+      if (p.sales_person_id)   directProfileIds.add(p.sales_person_id)
       if (p.trainer_session_id) sessionIds.add(p.trainer_session_id)
-      if (p.pt_assignment_id) assignmentIds.add(p.pt_assignment_id)
+      if (p.pt_assignment_id)   assignmentIds.add(p.pt_assignment_id)
     }
 
     type ProfileNameRow = { id: string; full_name: string | null }
-    type SessionSelectRow = { id: string; scheduled_at: string; member_id: string }
-
-    // Build profile name map (direct from profiles table — covers trainers and staff)
-    const profileMap: Record<string, string> = {}
-    if (profileIds.size > 0) {
-      const { data: rawDirectProfiles } = await svc
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', [...profileIds])
-      const directProfiles = (rawDirectProfiles ?? []) as ProfileNameRow[]
-      for (const p of directProfiles) {
-        profileMap[p.id] = p.full_name ?? 'Unknown'
-      }
-    }
-
-    // Fetch trainer sessions (for member name and date)
-    type SessionRow = { id: string; scheduled_at: string; member_id: string }
-    const sessionMap: Record<string, SessionRow> = {}
-    if (sessionIds.size > 0) {
-      const { data: rawSessions } = await svc
-        .from('trainer_sessions')
-        .select('id, scheduled_at, member_id')
-        .in('id', [...sessionIds])
-      const sessions = (rawSessions ?? []) as SessionSelectRow[]
-      for (const s of sessions) {
-        sessionMap[s.id] = s
-      }
-      const memberIds = sessions.map((s) => s.member_id).filter(Boolean)
-      if (memberIds.length > 0) {
-        const { data: rawMemberProfiles } = await svc
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', memberIds)
-        const memberProfiles = (rawMemberProfiles ?? []) as ProfileNameRow[]
-        for (const mp of memberProfiles) {
-          if (!profileMap[mp.id]) profileMap[mp.id] = mp.full_name ?? 'Unknown'
-        }
-      }
-    }
-
-    // Fetch assignments (for package name and member name)
-    type AssignmentRow = {
+    type SessionRow     = { id: string; scheduled_at: string; member_id: string }
+    type AssignmentRow  = {
       id: string
       assigned_at: string
       member_id: string
       membership: { membership_packages: { name: string } | null } | null
     }
+
+    // Round 2 — fire all three lookups in parallel
+    const [directProfiles, rawSessions, rawAssignments] = await Promise.all([
+      directProfileIds.size > 0
+        ? svc.from('profiles').select('id, full_name').in('id', [...directProfileIds])
+            .then(({ data }) => (data ?? []) as ProfileNameRow[])
+        : Promise.resolve([] as ProfileNameRow[]),
+
+      sessionIds.size > 0
+        ? svc.from('trainer_sessions').select('id, scheduled_at, member_id').in('id', [...sessionIds])
+            .then(({ data }) => (data ?? []) as SessionRow[])
+        : Promise.resolve([] as SessionRow[]),
+
+      assignmentIds.size > 0
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ? (svc as any).from('pt_assignments')
+            .select('id, assigned_at, member_id, membership:memberships!pt_assignments_membership_id_fkey(membership_packages(name))')
+            .in('id', [...assignmentIds])
+            .then(({ data }: { data: AssignmentRow[] | null }) => (data ?? []) as AssignmentRow[])
+        : Promise.resolve([] as AssignmentRow[]),
+    ])
+
+    const sessionMap: Record<string, SessionRow>    = {}
     const assignmentMap: Record<string, AssignmentRow> = {}
-    if (assignmentIds.size > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: assignments } = await (svc as any)
-        .from('pt_assignments')
-        .select('id, assigned_at, member_id, membership:memberships!pt_assignments_membership_id_fkey(membership_packages(name))')
-        .in('id', [...assignmentIds])
-      for (const a of ((assignments as AssignmentRow[]) ?? [])) {
-        assignmentMap[a.id] = a
-      }
-      const assignmentMemberIds = ((assignments as AssignmentRow[]) ?? []).map((a) => a.member_id).filter(Boolean)
-      if (assignmentMemberIds.length > 0) {
-        const { data: rawAssignmentMembers } = await svc
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', assignmentMemberIds)
-        const assignmentMembers = (rawAssignmentMembers ?? []) as ProfileNameRow[]
-        for (const mp of assignmentMembers) {
-          if (!profileMap[mp.id]) profileMap[mp.id] = mp.full_name ?? 'Unknown'
-        }
-      }
+    for (const s of rawSessions)    sessionMap[s.id]    = s
+    for (const a of rawAssignments) assignmentMap[a.id] = a
+
+    // Round 3 — fetch member names (sessions + assignments) in one batch
+    const memberIds = new Set<string>()
+    for (const s of rawSessions)    if (s.member_id)    memberIds.add(s.member_id)
+    for (const a of rawAssignments) if (a.member_id)    memberIds.add(a.member_id)
+
+    const memberProfiles = memberIds.size > 0
+      ? await svc.from('profiles').select('id, full_name').in('id', [...memberIds])
+          .then(({ data }) => (data ?? []) as ProfileNameRow[])
+      : [] as ProfileNameRow[]
+
+    const profileMap: Record<string, string> = {}
+    for (const p of [...directProfiles, ...memberProfiles]) {
+      profileMap[p.id] = p.full_name ?? 'Unknown'
     }
 
     const result: CommissionListItem[] = rawPayouts.map((p) => {
