@@ -27,7 +27,7 @@ export default async function SuperadminLayout({
   return (
     <QueryProvider>
       <div className="flex flex-col min-h-screen">
-        <Navbar brandName="FitnessPlace Platform" />
+        <Navbar brandName="Gerak Platform" />
         <div className="flex flex-1">
           <SuperadminSidebar />
           <main className="flex-1 overflow-auto p-6 bg-background">{children}</main>

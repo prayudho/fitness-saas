@@ -9,7 +9,7 @@ interface NavbarProps {
   logoUrl?: string | null
 }
 
-export function Navbar({ brandName = 'FitnessPlace', logoUrl }: NavbarProps) {
+export function Navbar({ brandName = 'Gerak', logoUrl }: NavbarProps) {
   const { user, signOut } = useAuth()
 
   return (

@@ -110,7 +110,7 @@ export async function requestPasswordReset(
   email: string
 ): Promise<{ error: string | null }> {
   const supabase = createClient()
-  const siteUrl  = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  const siteUrl  = process.env.NEXT_PUBLIC_APP_URL ?? 'https://gerak.online'
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: siteUrl + '/reset-password',
   })

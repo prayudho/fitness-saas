@@ -63,7 +63,7 @@ function baseLayout(brandName: string, content: string): string {
           <!-- Footer -->
           <tr>
             <td style="background-color:#f9f9fb;border:1px solid #e4e4e7;border-top:none;border-radius:0 0 8px 8px;padding:24px 40px;text-align:center;">
-              <p style="margin:0 0 4px;font-size:13px;color:#71717a;">This email was sent by ${brandName} via FitnessPlace.</p>
+              <p style="margin:0 0 4px;font-size:13px;color:#71717a;">This email was sent by ${brandName} via Gerak.</p>
               <p style="margin:0;font-size:13px;color:#71717a;">If you did not expect this email, please disregard it.</p>
             </td>
           </tr>
@@ -188,7 +188,7 @@ export function renderTeamInviteEmail(data: TeamInviteEmailData): EmailResult {
   const content = `
   <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Hi ${memberName},</h2>
   <p style="margin:0 0 4px;font-size:15px;color:#52525b;line-height:1.6;">
-    You have been added to <strong>${brandName}</strong> on FitnessPlace as:
+    You have been added to <strong>${brandName}</strong> on Gerak as:
   </p>
 
   ${roleBadge}
@@ -212,7 +212,7 @@ export function renderTeamInviteEmail(data: TeamInviteEmailData): EmailResult {
   </table>`
 
   return {
-    subject: `You've been added to ${brandName} on FitnessPlace`,
+    subject: `You've been added to ${brandName} on Gerak`,
     html: baseLayout(brandName, content),
   }
 }

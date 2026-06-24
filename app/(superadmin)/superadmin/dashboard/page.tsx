@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatsSkeleton, TableSkeleton } from '@/components/shared/skeleton-loaders'
 
-export const metadata: Metadata = { title: 'Platform Overview — FitnessPlace' }
+export const metadata: Metadata = { title: 'Platform Overview — Gerak' }
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
