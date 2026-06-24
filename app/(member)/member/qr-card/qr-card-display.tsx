@@ -24,7 +24,7 @@ export function QRCardDisplay({
     <Card className="overflow-hidden shadow-lg print:shadow-none print:border">
       {/* Header */}
       <div className="bg-primary px-6 py-5 text-primary-foreground text-center print:bg-gray-900 print:text-white">
-        <p className="text-xs font-medium uppercase tracking-widest opacity-75">FitnessPlace</p>
+        <p className="text-xs font-medium uppercase tracking-widest opacity-75">Gerak</p>
         <p className="text-lg font-bold mt-0.5">Member Card</p>
       </div>
 
