@@ -24,6 +24,9 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { signOut } from '@/lib/actions/auth'
+import { ROLE_VARIANTS } from '@/lib/design-tokens'
+
+const token = ROLE_VARIANTS.branch_manager
 
 const STORAGE_KEY = 'branch-manager-sidebar-collapsed'
 
@@ -55,8 +58,8 @@ function NavLinks({
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className={cn('flex items-center gap-2 px-3 py-4 border-b', collapsed && 'px-2 justify-center')}>
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 flex-shrink-0">
-          <Building2 className="h-4 w-4 text-primary" />
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 flex-shrink-0">
+          <Building2 className="h-4 w-4 text-violet-600" />
         </div>
         {!collapsed && (
           <div className="min-w-0">
@@ -83,10 +86,11 @@ function NavLinks({
                   className={cn(
                     'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors min-h-[44px]',
                     isActive
-                      ? 'bg-primary/10 text-primary font-medium'
+                      ? cn(token.activeClass, 'font-medium')
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                     collapsed && 'px-2 justify-center'
                   )}
+                  style={isActive ? { boxShadow: token.activeShadow } : undefined}
                   title={collapsed ? label : undefined}
                 >
                   <Icon className="h-4 w-4 flex-shrink-0" />
@@ -148,6 +152,7 @@ export function BranchManagerSidebar({ branchName }: { branchName: string }) {
           'fixed inset-y-0 left-0 z-50 w-64 border-r bg-background transition-transform md:hidden',
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
+        style={{ backgroundColor: token.sidebarBgHex }}
       >
         <div className="flex justify-end p-2">
           <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)}>
@@ -175,9 +180,10 @@ export function BranchManagerSidebar({ branchName }: { branchName: string }) {
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'relative hidden h-screen flex-col border-r bg-background transition-all duration-200 md:flex',
+          'relative hidden h-screen flex-col border-r transition-all duration-200 md:flex',
           collapsed ? 'w-14' : 'w-60'
         )}
+        style={{ backgroundColor: token.sidebarBgHex }}
       >
         <NavLinks collapsed={collapsed} branchName={branchName} />
 

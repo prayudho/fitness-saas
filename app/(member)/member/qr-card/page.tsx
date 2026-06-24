@@ -190,7 +190,7 @@ export default function QRCardPage() {
           style={{ backgroundColor: primaryColor }}
         >
           <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-medium opacity-80">{brand?.name ?? 'FitnessPlace'}</span>
+            <span className="text-xs font-medium opacity-80">{brand?.name ?? 'Gerak'}</span>
             <span className="text-xs font-semibold uppercase tracking-widest opacity-80">
               Membership Card
             </span>

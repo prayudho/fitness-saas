@@ -5,7 +5,7 @@ export default function HomePage() {
     <main className="flex min-h-screen flex-col items-center justify-center p-8">
       <div className="text-center space-y-6 max-w-2xl">
         <div className="space-y-2">
-          <h1 className="text-5xl font-bold tracking-tight">FitnessPlace</h1>
+          <h1 className="text-5xl font-bold tracking-tight">Gerak</h1>
           <p className="text-xl text-muted-foreground">
             The all-in-one SaaS platform for fitness businesses
           </p>

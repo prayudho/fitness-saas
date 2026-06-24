@@ -312,7 +312,7 @@ export default function SettingsPage() {
                         <FormItem>
                           <FormLabel>Brand Display Name</FormLabel>
                           <FormControl>
-                            <Input placeholder="FitnessPlace" {...field} />
+                            <Input placeholder="Gerak" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -529,7 +529,7 @@ export default function SettingsPage() {
                     className="p-2 text-xs font-semibold"
                     style={{ backgroundColor: primaryColor, color: '#ffffff' }}
                   >
-                    FitnessPlace
+                    Gerak
                   </div>
                   <div className="bg-white p-2 text-xs space-y-1">
                     <div

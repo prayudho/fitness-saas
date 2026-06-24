@@ -203,7 +203,7 @@ export default function NewBrandPage() {
       <div>
         <h1 className="text-2xl font-bold">Onboard New Brand</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Create a new gym brand on the FitnessPlace platform.
+          Create a new gym brand on the Gerak platform.
         </p>
       </div>
 

@@ -73,7 +73,7 @@ export function SuperadminSidebar() {
         {!collapsed && (
           <div className="flex flex-col min-w-0">
             <span className="font-bold text-sm text-white leading-tight truncate">
-              FitnessPlace
+              Gerak
             </span>
             <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-rose-100 text-rose-700 leading-none w-fit">
               SUPER ADMIN

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { MemberSidebar } from '@/components/layouts/member-sidebar'
 import { TopBar } from '@/components/layouts/topbar'
+import { MobileBottomNav } from '@/components/layouts/mobile-bottom-nav'
 import { QueryProvider } from '@/components/providers/query-provider'
 import { Toaster } from 'sonner'
 
@@ -74,12 +75,14 @@ export default async function MemberLayout({
             userEmail={displayEmail}
             userRole="member"
             brandName={brand?.name}
+            showMobileMenu={false}
           />
-          <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6 md:pb-6">
             <QueryProvider>{children}</QueryProvider>
           </main>
         </div>
       </div>
+      <MobileBottomNav />
       <Toaster richColors />
     </div>
   )

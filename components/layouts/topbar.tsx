@@ -1,6 +1,7 @@
 'use client'
 
 import { Menu } from 'lucide-react'
+import { cn, getInitials } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -12,12 +13,14 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { signOut } from '@/lib/actions/auth'
 import { useMobileNav } from '@/lib/stores/mobile-nav-store'
+import { ROLE_VARIANTS, type RoleVariantKey } from '@/lib/design-tokens'
 
 interface TopBarProps {
   userName?: string
   userEmail?: string
   userRole?: string
   brandName?: string
+  showMobileMenu?: boolean
 }
 
 function getProfileHref(role?: string): string {
@@ -25,6 +28,8 @@ function getProfileHref(role?: string): string {
     case 'admin':
     case 'superadmin':
       return '/admin/settings'
+    case 'branch_manager':
+      return '/branch-manager/account'
     case 'staff':
       return '/staff/profile'
     case 'trainer':
@@ -36,35 +41,44 @@ function getProfileHref(role?: string): string {
   }
 }
 
-function getInitials(name?: string): string {
-  if (!name) return 'U'
-  return name
-    .split(' ')
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
+function RoleBadge({ role }: { role?: string }) {
+  if (!role) return null
+  const token = ROLE_VARIANTS[role as RoleVariantKey]
+  if (!token) return null
+  return (
+    <span className={cn(
+      'inline-flex items-center h-6 px-2 rounded-full text-xs font-medium ring-1 ring-inset ring-current/20',
+      token.badgeClass
+    )}>
+      {token.label}
+    </span>
+  )
 }
 
-export function TopBar({ userName, userEmail, userRole, brandName }: TopBarProps) {
+export function TopBar({ userName, userEmail, userRole, brandName, showMobileMenu = true }: TopBarProps) {
   const { toggle } = useMobileNav()
   const profileHref = getProfileHref(userRole)
 
   return (
     <header className="h-14 border-b bg-background/95 backdrop-blur sticky top-0 z-40 flex items-center px-4 gap-3">
       {/* Mobile menu trigger */}
-      <button
-        onClick={toggle}
-        className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors md:hidden"
-        aria-label="Toggle mobile navigation"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
+      {showMobileMenu && (
+        <button
+          onClick={toggle}
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors md:hidden"
+          aria-label="Toggle mobile navigation"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      )}
 
       {/* Brand name */}
       <span className="font-semibold text-sm flex-1 truncate">
-        {brandName ?? 'FitnessPlace'}
+        {brandName ?? 'Gerak'}
       </span>
+
+      {/* Role badge */}
+      <RoleBadge role={userRole} />
 
       {/* Right: user dropdown */}
       <DropdownMenu>

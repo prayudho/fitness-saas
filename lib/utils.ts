@@ -39,6 +39,16 @@ export function generateQRData(memberId: string, brandId: string, timestamp: num
   return btoa(`${brandId}:${memberId}:${timestamp}`)
 }
 
+export function getInitials(name?: string, fallback = 'U'): string {
+  if (!name) return fallback
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+}
+
 export function slugify(text: string): string {
   return text
     .toLowerCase()
