@@ -5,6 +5,9 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Calendar, Users, Clock, DollarSign, KeyRound, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ROLE_VARIANTS } from '@/lib/design-tokens'
+
+const token = ROLE_VARIANTS.trainer
 
 const STORAGE_KEY = 'trainer-sidebar-collapsed'
 
@@ -15,39 +18,16 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/trainer/schedule', label: 'My Schedule', icon: Calendar },
-  { href: '/trainer/clients', label: 'My Clients', icon: Users },
+  { href: '/trainer/schedule',     label: 'My Schedule', icon: Calendar },
+  { href: '/trainer/clients',      label: 'My Clients',  icon: Users },
   { href: '/trainer/availability', label: 'Availability', icon: Clock },
-  { href: '/trainer/sessions', label: 'Sessions', icon: Clock },
-  { href: '/trainer/earnings', label: 'Earnings', icon: DollarSign },
-  { href: '/trainer/account', label: 'My Account', icon: KeyRound },
+  { href: '/trainer/sessions',     label: 'Sessions',    icon: Clock },
+  { href: '/trainer/earnings',     label: 'Earnings',    icon: DollarSign },
+  { href: '/trainer/account',      label: 'My Account',  icon: KeyRound },
 ]
 
-export function TrainerSidebar() {
-  const pathname = usePathname()
-  const [collapsed, setCollapsed] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored !== null) {
-      setCollapsed(stored === 'true')
-    }
-  }, [])
-
-  useEffect(() => {
-    setMobileOpen(false)
-  }, [pathname])
-
-  const toggleCollapsed = () => {
-    const next = !collapsed
-    setCollapsed(next)
-    localStorage.setItem(STORAGE_KEY, String(next))
-  }
-
-  const NavLinks = () => (
+function NavLinks({ pathname, collapsed }: { pathname: string; collapsed: boolean }) {
+  return (
     <nav className="flex flex-col gap-0.5 p-2 flex-1">
       {navItems.map(({ href, label, icon: Icon }) => {
         const isActive = pathname === href || pathname.startsWith(href + '/')
@@ -60,9 +40,10 @@ export function TrainerSidebar() {
               'flex items-center gap-3 rounded-md px-3 py-2.5 min-h-[44px] text-sm transition-colors',
               collapsed ? 'justify-center' : '',
               isActive
-                ? 'bg-primary text-primary-foreground font-medium'
+                ? cn(token.activeClass, 'font-medium')
                 : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
             )}
+            style={isActive ? { boxShadow: token.activeShadow } : undefined}
           >
             <Icon className="h-4 w-4 shrink-0" />
             {!collapsed && <span className="flex-1 truncate">{label}</span>}
@@ -71,6 +52,29 @@ export function TrainerSidebar() {
       })}
     </nav>
   )
+}
+
+export function TrainerSidebar() {
+  const pathname = usePathname()
+  const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored !== null) setCollapsed(stored === 'true')
+  }, [])
+
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [pathname])
+
+  const toggleCollapsed = () => {
+    const next = !collapsed
+    setCollapsed(next)
+    localStorage.setItem(STORAGE_KEY, String(next))
+  }
 
   if (!mounted) {
     return (
@@ -91,7 +95,7 @@ export function TrainerSidebar() {
       {/* Mobile toggle button */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="fixed bottom-4 left-4 z-50 md:hidden flex items-center justify-center h-10 w-10 rounded-full bg-primary text-primary-foreground shadow-lg"
+        className="fixed bottom-4 left-4 z-50 md:hidden flex items-center justify-center h-10 w-10 rounded-full bg-emerald-600 text-white shadow-lg"
         aria-label="Open menu"
       >
         <Menu className="h-5 w-5" />
@@ -103,6 +107,7 @@ export function TrainerSidebar() {
           'fixed inset-y-0 left-0 z-50 w-60 bg-card border-r flex flex-col transition-transform duration-200 ease-in-out md:hidden',
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
+        style={{ backgroundColor: token.sidebarBgHex }}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -116,22 +121,21 @@ export function TrainerSidebar() {
             <X className="h-4 w-4" />
           </button>
         </div>
-        <NavLinks />
+        <NavLinks pathname={pathname} collapsed={false} />
       </aside>
 
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'hidden md:flex flex-col shrink-0 min-h-[calc(100vh-3.5rem)] border-r bg-card transition-all duration-200 ease-in-out',
+          'hidden md:flex flex-col shrink-0 min-h-[calc(100vh-3.5rem)] border-r transition-all duration-200 ease-in-out',
           collapsed ? 'w-14' : 'w-60'
         )}
+        style={{ backgroundColor: token.sidebarBgHex }}
       >
-        <div
-          className={cn(
-            'flex items-center border-b px-3 py-3',
-            collapsed ? 'justify-center' : 'justify-between'
-          )}
-        >
+        <div className={cn(
+          'flex items-center border-b px-3 py-3',
+          collapsed ? 'justify-center' : 'justify-between'
+        )}>
           {!collapsed && (
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Trainer Portal
@@ -142,14 +146,10 @@ export function TrainerSidebar() {
             className="text-muted-foreground hover:text-foreground ml-auto"
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-            {collapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
         </div>
-        <NavLinks />
+        <NavLinks pathname={pathname} collapsed={collapsed} />
       </aside>
     </>
   )

@@ -21,23 +21,27 @@ import {
   Coins,
   Building2,
 } from 'lucide-react'
+import { cn, getInitials } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { signOut } from '@/lib/actions/auth'
 import { useMobileNav } from '@/lib/stores/mobile-nav-store'
+import { ROLE_VARIANTS } from '@/lib/design-tokens'
+
+const token = ROLE_VARIANTS.admin
 
 const BASE_NAV_ITEMS = [
-  { href: '/admin/dashboard', label: 'Dashboard',    icon: LayoutDashboard },
-  { href: '/admin/members',   label: 'Members',      icon: Users },
-  { href: '/admin/packages',  label: 'Packages',     icon: Package },
-  { href: '/admin/classes',   label: 'Classes',      icon: CalendarDays },
-  { href: '/admin/trainers',  label: 'Trainers',     icon: UserCheck },
+  { href: '/admin/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
+  { href: '/admin/members',     label: 'Members',     icon: Users },
+  { href: '/admin/packages',    label: 'Packages',    icon: Package },
+  { href: '/admin/classes',     label: 'Classes',     icon: CalendarDays },
+  { href: '/admin/trainers',    label: 'Trainers',    icon: UserCheck },
   { href: '/admin/commissions', label: 'Commissions', icon: Coins },
-  { href: '/admin/team',      label: 'Team',         icon: UsersRound },
-  { href: '/admin/billing',   label: 'Billing',      icon: CreditCard },
-  { href: '/admin/reports',   label: 'Reports',      icon: BarChart3 },
-  { href: '/admin/settings',  label: 'Settings',     icon: Settings },
-  { href: '/admin/account',   label: 'My Account',   icon: KeyRound },
+  { href: '/admin/team',        label: 'Team',        icon: UsersRound },
+  { href: '/admin/billing',     label: 'Billing',     icon: CreditCard },
+  { href: '/admin/reports',     label: 'Reports',     icon: BarChart3 },
+  { href: '/admin/settings',    label: 'Settings',    icon: Settings },
+  { href: '/admin/account',     label: 'My Account',  icon: KeyRound },
 ]
 
 const BRANCH_NAV_ITEM = { href: '/admin/branches', label: 'Branches', icon: Building2 }
@@ -59,11 +63,13 @@ export function AdminSidebar({ userName, userEmail, userRole, isMultiBranch }: A
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored !== null) {
-      setIsCollapsed(stored === 'true')
-    }
+    if (stored !== null) setIsCollapsed(stored === 'true')
     setMounted(true)
   }, [])
+
+  useEffect(() => {
+    close()
+  }, [pathname, close])
 
   function toggleCollapsed() {
     const next = !isCollapsed
@@ -71,185 +77,92 @@ export function AdminSidebar({ userName, userEmail, userRole, isMultiBranch }: A
     localStorage.setItem(STORAGE_KEY, String(next))
   }
 
-  function getInitials(name?: string) {
-    if (!name) return 'U'
-    return name
-      .split(' ')
-      .map((part) => part[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2)
-  }
-
-  // Prevent hydration mismatch — render expanded on server
   const collapsed = mounted ? isCollapsed : false
 
-  // Insert Branches item after Members when is_multi_branch is enabled
   const NAV_ITEMS = isMultiBranch
-    ? [
-        ...BASE_NAV_ITEMS.slice(0, 2),
-        BRANCH_NAV_ITEM,
-        ...BASE_NAV_ITEMS.slice(2),
-      ]
+    ? [...BASE_NAV_ITEMS.slice(0, 2), BRANCH_NAV_ITEM, ...BASE_NAV_ITEMS.slice(2)]
     : BASE_NAV_ITEMS
 
   return (
     <>
-    <aside
-      className={`
-        hidden md:flex flex-col
-        ${collapsed ? 'w-16' : 'w-60'}
-        transition-all duration-300
-        bg-card border-r h-screen sticky top-0
-        overflow-hidden
-      `}
-    >
-      {/* Logo / Brand area */}
-      <div className="flex items-center justify-between px-3 py-4 border-b shrink-0">
-        {!collapsed && (
-          <div className="flex items-center gap-2 overflow-hidden">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+      <aside
+        className={cn(
+          'hidden md:flex flex-col h-screen sticky top-0 overflow-hidden border-r transition-all duration-300',
+          collapsed ? 'w-16' : 'w-60'
+        )}
+        style={{ backgroundColor: token.sidebarBgHex }}
+      >
+        {/* Logo / Brand area */}
+        <div className="flex items-center justify-between px-3 py-4 border-b shrink-0">
+          {!collapsed && (
+            <div className="flex items-center gap-2 overflow-hidden">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <Dumbbell className="h-4 w-4" />
+              </div>
+              <span className="font-semibold text-sm truncate">Gerak</span>
+            </div>
+          )}
+          {collapsed && (
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground mx-auto">
               <Dumbbell className="h-4 w-4" />
             </div>
-            <span className="font-semibold text-sm truncate">FitnessPlace</span>
-          </div>
-        )}
-        {collapsed && (
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground mx-auto">
-            <Dumbbell className="h-4 w-4" />
-          </div>
-        )}
-        <button
-          onClick={toggleCollapsed}
-          className={`
-            flex h-7 w-7 shrink-0 items-center justify-center rounded-md
-            text-muted-foreground hover:bg-accent hover:text-accent-foreground
-            transition-colors
-            ${collapsed ? 'ml-auto' : ''}
-          `}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <ChevronLeft className="h-4 w-4" />
           )}
-        </button>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-1">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname.startsWith(href)
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`
-                flex items-center gap-3 rounded-md px-2 py-2 min-h-[44px] text-sm font-medium
-                transition-colors
-                ${
-                  isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                }
-                ${collapsed ? 'justify-center' : ''}
-              `}
-              title={collapsed ? label : undefined}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span
-                className={`
-                  truncate transition-all duration-300
-                  ${collapsed ? 'w-0 opacity-0 overflow-hidden' : 'w-auto opacity-100'}
-                `}
-              >
-                {label}
-              </span>
-            </Link>
-          )
-        })}
-      </nav>
-
-      {/* Bottom: user info + sign out */}
-      <div className="border-t p-3 shrink-0">
-        <div
-          className={`flex items-center gap-3 ${collapsed ? 'justify-center flex-col' : ''}`}
-        >
-          <Avatar className="h-8 w-8 shrink-0">
-            <AvatarImage src={undefined} />
-            <AvatarFallback className="text-xs">{getInitials(userName)}</AvatarFallback>
-          </Avatar>
-
-          {!collapsed && (
-            <div className="flex-1 overflow-hidden min-w-0">
-              <p className="text-sm font-medium truncate leading-tight">
-                {userName ?? 'Admin User'}
-              </p>
-              <p className="text-xs text-muted-foreground truncate capitalize leading-tight">
-                {userRole ?? 'admin'}
-              </p>
-            </div>
-          )}
-
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-              aria-label="Sign out"
-              title="Sign out"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </form>
-        </div>
-      </div>
-    </aside>
-
-    {/* Mobile navigation drawer */}
-    <Sheet open={isOpen} onOpenChange={(open) => { if (!open) close() }}>
-      <SheetContent side="left" className="p-0 w-64 flex flex-col">
-        <SheetTitle className="sr-only">Navigation</SheetTitle>
-        <div className="flex items-center gap-2 px-3 py-4 border-b shrink-0">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Dumbbell className="h-4 w-4" />
-          </div>
-          <span className="font-semibold text-sm">FitnessPlace</span>
+          <button
+            onClick={toggleCollapsed}
+            className={cn(
+              'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
+              'text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors',
+              collapsed ? 'ml-auto' : ''
+            )}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-1">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const isActive = pathname.startsWith(href)
             return (
               <Link
                 key={href}
                 href={href}
-                onClick={close}
-                className={`
-                  flex items-center gap-3 rounded-md px-2 py-2 min-h-[44px] text-sm font-medium
-                  transition-colors
-                  ${isActive
-                    ? 'bg-primary text-primary-foreground'
+                className={cn(
+                  'flex items-center gap-3 rounded-md px-2 py-2 min-h-[44px] text-sm font-medium transition-colors',
+                  collapsed ? 'justify-center' : '',
+                  isActive
+                    ? token.activeClass
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                  }
-                `}
+                )}
+                style={isActive ? { boxShadow: token.activeShadow } : undefined}
+                title={collapsed ? label : undefined}
               >
                 <Icon className="h-4 w-4 shrink-0" />
-                {label}
+                <span className={cn(
+                  'truncate transition-all duration-300',
+                  collapsed ? 'w-0 opacity-0 overflow-hidden' : 'w-auto opacity-100'
+                )}>
+                  {label}
+                </span>
               </Link>
             )
           })}
         </nav>
 
+        {/* Bottom: user info + sign out */}
         <div className="border-t p-3 shrink-0">
-          <div className="flex items-center gap-3">
+          <div className={cn('flex items-center gap-3', collapsed ? 'justify-center flex-col' : '')}>
             <Avatar className="h-8 w-8 shrink-0">
+              <AvatarImage src={undefined} />
               <AvatarFallback className="text-xs">{getInitials(userName)}</AvatarFallback>
             </Avatar>
-            <div className="flex-1 overflow-hidden min-w-0">
-              <p className="text-sm font-medium truncate leading-tight">{userName ?? 'Admin User'}</p>
-              <p className="text-xs text-muted-foreground truncate capitalize leading-tight">{userRole ?? 'admin'}</p>
-            </div>
+            {!collapsed && (
+              <div className="flex-1 overflow-hidden min-w-0">
+                <p className="text-sm font-medium truncate leading-tight">{userName ?? 'Admin User'}</p>
+                <p className="text-xs text-muted-foreground truncate capitalize leading-tight">{userRole ?? 'admin'}</p>
+              </div>
+            )}
             <form action={signOut}>
               <button
                 type="submit"
@@ -262,8 +175,65 @@ export function AdminSidebar({ userName, userEmail, userRole, isMultiBranch }: A
             </form>
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </aside>
+
+      {/* Mobile navigation drawer */}
+      <Sheet open={isOpen} onOpenChange={(open) => { if (!open) close() }}>
+        <SheetContent side="left" className="p-0 w-64 flex flex-col">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <div className="flex items-center gap-2 px-3 py-4 border-b shrink-0">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <Dumbbell className="h-4 w-4" />
+            </div>
+            <span className="font-semibold text-sm">Gerak</span>
+          </div>
+
+          <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
+            {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+              const isActive = pathname.startsWith(href)
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={close}
+                  className={cn(
+                    'flex items-center gap-3 rounded-md px-2 py-2 min-h-[44px] text-sm font-medium transition-colors',
+                    isActive
+                      ? token.activeClass
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                  style={isActive ? { boxShadow: token.activeShadow } : undefined}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {label}
+                </Link>
+              )
+            })}
+          </nav>
+
+          <div className="border-t p-3 shrink-0">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-8 w-8 shrink-0">
+                <AvatarFallback className="text-xs">{getInitials(userName)}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1 overflow-hidden min-w-0">
+                <p className="text-sm font-medium truncate leading-tight">{userName ?? 'Admin User'}</p>
+                <p className="text-xs text-muted-foreground truncate capitalize leading-tight">{userRole ?? 'admin'}</p>
+              </div>
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  aria-label="Sign out"
+                  title="Sign out"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </form>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   )
 }
