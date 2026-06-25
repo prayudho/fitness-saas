@@ -19,7 +19,7 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { ROLE_VARIANTS } from '@/lib/design-tokens'
 
 const token = ROLE_VARIANTS.member
-const activeBottomShadow = activeBottomShadow
+const activeBottomShadow = 'inset 0 3px 0 #0ea5e9'
 
 const PRIMARY_ITEMS = [
   { href: '/member',          label: 'Dashboard', icon: Home },
