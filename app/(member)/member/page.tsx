@@ -99,9 +99,8 @@ async function fetchDashboardData(): Promise<DashboardData> {
       .select(`*, classes(*, class_types(*), instructor_profile:instructor_id(id, full_name, avatar_url))`)
       .eq('member_id', user.id)
       .in('status', ['booked', 'waitlisted'])
-      .gte('classes.scheduled_at', now.toISOString())
       .order('booked_at', { ascending: true })
-      .limit(3),
+      .limit(20),
     supabase
       .from('trainer_sessions')
       .select('*, trainer:trainer_id(id, profiles:id(id, full_name, avatar_url))')
@@ -182,9 +181,9 @@ async function fetchDashboardData(): Promise<DashboardData> {
   return {
     profile: profileData,
     activeMemberships,
-    upcomingBookings: ((bookingsResult.data ?? []) as unknown as BookingWithClass[]).filter(
-      (b) => b.classes && new Date(b.classes.scheduled_at) >= now
-    ),
+    upcomingBookings: ((bookingsResult.data ?? []) as unknown as BookingWithClass[])
+      .filter((b) => b.classes && new Date(b.classes.scheduled_at) >= now)
+      .slice(0, 3),
     upcomingPTSessions: (ptSessionsResult.data ?? []) as unknown as TrainerSessionWithTrainer[],
     recentCheckins: (checkinsResult.data ?? []) as CheckinRow[],
     classesThisMonth: monthBookingsResult.count ?? 0,
